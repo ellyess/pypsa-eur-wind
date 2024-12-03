@@ -5,7 +5,7 @@
 tutorial: true
 
 run:
-  name: "test-sector-overnight"
+  name: "test-sector-overnight-modified"
   disable_progressbar: true
   shared_resources:
     policy: "test"
@@ -31,7 +31,7 @@ snapshots:
 electricity:
 
   extendable_carriers:
-    Generator: [OCGT]
+    Generator: [offwind-ac, offwind-dc, offwind-float, onwind]
     StorageUnit: [battery]
     Store: [H2]
     Link: [H2 pipeline]

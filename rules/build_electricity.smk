@@ -263,6 +263,7 @@ rule determine_availability_matrix:
             if w.technology in ("onwind", "solar", "solar-hsat")
             else resources("regions_offshore_base_s_{clusters}.geojson")
         ),
+        regions_more=resources("regions_offshore_base_s.geojson"),
         cutout=lambda w: "cutouts/"
         + CDIR
         + config_provider("renewable", w.technology, "cutout")(w)
@@ -290,7 +291,12 @@ rule build_renewable_profiles:
     input:
         availability_matrix=resources("availability_matrix_{clusters}_{technology}.nc"),
         offshore_shapes=resources("offshore_shapes.geojson"),
-        regions=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions=lambda w: (
+            resources("regions_onshore_base_s_{clusters}.geojson")
+            if w.technology in ("onwind", "solar", "solar-hsat")
+            else resources("regions_offshore_base_s_{clusters}.geojson")
+        ),
+        regions_more=resources("regions_offshore_base_s.geojson"),
         cutout=lambda w: "cutouts/"
         + CDIR
         + config_provider("renewable", w.technology, "cutout")(w)
@@ -624,6 +630,7 @@ rule cluster_network:
         regions_offshore=resources("regions_offshore_base_s_{clusters}.geojson"),
         busmap=resources("busmap_base_s_{clusters}.csv"),
         linemap=resources("linemap_base_s_{clusters}.csv"),
+        # regions_offshore_split=resources("regions_offshore_base_s_{clusters}_.geojson")
     log:
         logs("cluster_network_base_s_{clusters}.log"),
     benchmark:

@@ -454,6 +454,8 @@ def update_wind_solar_costs(
                 + costs.at[tech + "-station", "fixed"]
                 + connection_cost
             )
+            
+            # print(capital_cost)
 
             logger.info(
                 "Added connection cost of {:0.0f}-{:0.0f} Eur/MW/a to {}".format(
@@ -461,9 +463,35 @@ def update_wind_solar_costs(
                 )
             )
 
-            n.generators.loc[n.generators.carrier == tech, "capital_cost"] = (
-                capital_cost.rename(index=lambda node: node + " " + tech)
+            
+            idx = n.generators.loc[n.generators.carrier == tech, "capital_cost"].index
+            
+            idx = dict(
+                zip(
+                    capital_cost.index,
+                    capital_cost.index.map(lambda x: idx[idx.str.contains(x)]),
+                )
             )
+            
+            test = pd.DataFrame.from_dict(idx, orient='index')
+            # print(test)
+                    
+            test['capital_cost'] = capital_cost
+            # print(test)
+            # pd.melt(test.T, id_vars=
+            #     .melt(var_name='bus', value_name='generator')
+            #     .dropna(subset=['generator'])).set_index('generator')
+            test = test.reset_index(names="bus").melt(id_vars=["bus", "capital_cost"],value_name='generator').dropna(subset=['generator']).set_index('generator')
+            # print(test)
+            test = test.drop(columns=["bus", "variable"])
+            n.generators.loc[n.generators.carrier == tech, "capital_cost"] = test
+                
+            # # n.generators.loc[n.generators.carrier == tech, "capital_cost"] = (
+            # #     capital_cost.rename(index=lambda node: node + " " + tech)
+            # # )
+            
+            
+            
 
 
 def add_carrier_buses(n, carrier, nodes=None):

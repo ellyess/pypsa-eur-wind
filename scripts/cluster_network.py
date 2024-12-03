@@ -115,6 +115,8 @@ from pypsa.clustering.spatial import (
 )
 from scipy.sparse.csgraph import connected_components
 
+from add_wind_functions import split_regions
+
 PD_GE_2_2 = parse(pd.__version__) >= Version("2.2")
 
 warnings.filterwarnings(action="ignore", category=UserWarning)
@@ -423,6 +425,21 @@ if __name__ == "__main__":
         clustered_regions = cluster_regions((clustering.busmap,), regions)
         clustered_regions.to_file(snakemake.output[which])
         # append_bus_shapes(nc, clustered_regions, type=which.split("_")[1])
+        
+        if which == "regions_offshore":
+            # threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+            # max_area = int(snakemake.config["offshore_mods"].get("max_area"))
+            # meshed_regions = split_regions(clustered_regions,threshold,max_area)
+            # meshed_regions["area"] = meshed_regions.geometry.to_crs(3035).area / 1e6
+            # meshed_regions.to_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
+            
+            
+            threshold = int(snakemake.wildcards.splits)
+            max_area = int(snakemake.config["offshore_mods"].get("max_area"))
+            meshed_regions = split_regions(clustered_regions,threshold,max_area)
+            meshed_regions["area"] = meshed_regions.geometry.to_crs(3035).area / 1e6
+            meshed_regions.to_file(snakemake.output["regions_offshore_split"])
+            
 
     nc.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     nc.export_to_netcdf(snakemake.output.network)

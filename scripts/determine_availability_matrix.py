@@ -107,6 +107,13 @@ if __name__ == "__main__":
         f"List of regions in {snakemake.input.regions} is empty, please "
         "disable the corresponding renewable technology"
     )
+    
+    if snakemake.wildcards.technology.startswith("offwind"):
+        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+        if threshold < 5000000:
+            regions = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
+        
+        
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
 
