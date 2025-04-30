@@ -224,6 +224,46 @@ def input_ua_md_availability_matrix(w):
         }
     return {}
 
+# # Added by ellyess
+# rule split_offshore_regions:
+#     params:
+#         mods=config_provider("offshore_mods"),
+#     input:
+#         regions_offshore=resources("regions_offshore_base_s_{clusters}.geojson"),
+#         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
+#     output:
+#         regions_offshore_split=resources("regions_offshore_base_s_{clusters}_{splits}"),
+#         regions_onshore_split=resources("regions_onshore_base_s_{clusters}_{splits}"),
+#     log:
+#         logs("split_offshore_regions_{clusters}_{splits}.log"),
+#     resources:
+#         mem_mb=5000,
+#     benchmark:
+#         benchmarks("split_offshore_regions_{clusters}_{splits}")
+#     conda:
+#         "../envs/environment.yaml"
+#     script:
+#         "../scripts/split_offshore_regions.py"
+
+# # def input_region_split(w):
+    
+# #     return {
+# #         f"profile_{tech}": resources(
+# #             "regions_offshore_base_s_{clusters}_" + str(splits) + ".geojson
+# #             if tech != "hydro"
+# #             else f"profile_{tech}.nc"
+# #         )
+# #         for splits in config_provider("offshore_mods", "region_area_threshold")(w)
+# #             return {
+# #         f"profile_{tech}": resources(
+# #             "profile_{clusters}_" + tech + ".nc"
+# #             if tech != "hydro"
+# #             else f"profile_{tech}.nc"
+# #         )
+# #         for tech in config_provider("electricity", "renewable_carriers")(w)
+# #     }
+# #     }
+
 
 rule determine_availability_matrix:
     params:
@@ -263,7 +303,6 @@ rule determine_availability_matrix:
             if w.technology in ("onwind", "solar", "solar-hsat")
             else resources("regions_offshore_base_s_{clusters}.geojson")
         ),
-        regions_more=resources("regions_offshore_base_s.geojson"),
         cutout=lambda w: "cutouts/"
         + CDIR
         + config_provider("renewable", w.technology, "cutout")(w)
@@ -296,7 +335,6 @@ rule build_renewable_profiles:
             if w.technology in ("onwind", "solar", "solar-hsat")
             else resources("regions_offshore_base_s_{clusters}.geojson")
         ),
-        regions_more=resources("regions_offshore_base_s.geojson"),
         cutout=lambda w: "cutouts/"
         + CDIR
         + config_provider("renewable", w.technology, "cutout")(w)

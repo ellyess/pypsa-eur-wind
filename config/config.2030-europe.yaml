@@ -20,42 +20,26 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-allwind"
+  prefix: "2030-40-europe"
   name:
-  - base-s200000
-  - base-s100000
   - base-s50000
-  - base-s25000
-  - base-s10000
-  - base-s5000
-  - base-s1000
-  - standard-s200000
-  - standard-s100000
   - standard-s50000
-  - standard-s25000
-  - standard-s10000
-  - standard-s5000
-  - standard-s1000
-  - ellyess-s200000
-  - ellyess-s100000
   - ellyess-s50000
-  - ellyess-s25000
-  - ellyess-s10000
-  - ellyess-s5000
-  - ellyess-s1000
-  - glaum-s200000
-  - glaum-s100000
   - glaum-s50000
-  - glaum-s25000
-  - glaum-s10000
-  - glaum-s5000
-  - glaum-s1000
+  - base-s100000
+  - standard-s100000
+  - ellyess-s100000
+  - glaum-s100000
+  - base-s1000000000
+  - standard-s1000000000
+  - ellyess-s1000000000
+  - glaum-s1000000000
   scenarios:
     enable: true
     file: config/scenarios.yaml
   disable_progressbar: false
   shared_resources:
-    policy: base
+    policy: false
     exclude: []
   shared_cutouts: true
 
@@ -68,19 +52,16 @@ scenario:
   ll:
   - vopt
   clusters:
-  - 10
+  - 40
   opts:
   - ''
   sector_opts:
   - ''
   planning_horizons:
-  # - 2020
-  #- 2030
-  # - 2040
-  # - 2050
+  - 2030
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#countries
-countries: ['BE','DK','NL','GB','FR','DE','NO']
+countries: ['AL', 'AT', 'BA', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'ES', 'FR', 'GB', 'GR', 'HR', 'IE', 'IT', 'LU', 'ME', 'MK', 'NL', 'NO', 'PT', 'RS', 'SE', 'SI', 'XK']
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#snapshots
 snapshots:
   start: "2013-01-01"
@@ -110,8 +91,8 @@ co2_budget:
 ########### MY ADDDITION
 offshore_mods:
   wake_model: base # base, standard, ellyess, glaum
-  region_area_threshold: 200000 # area of regions
-  max_area: 200000 # max area of all regions
+  region_area_threshold: 1000000000 # area of regions
+  max_area: 1000000000 # max area of all regions
   
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
 electricity:
@@ -135,7 +116,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [offwind-ac, offwind-dc, offwind-float, onwind, solar]
+    Generator: [solar, onwind, offwind-ac, offwind-dc, offwind-float, OCGT, CCGT]
     StorageUnit: [] # battery, H2
     Store: [battery, H2]
     Link: [] # H2 pipeline
@@ -145,7 +126,7 @@ electricity:
   everywhere_powerplants: []
 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
-  renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, offwind-float, hydro]
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float, hydro]
 
   estimate_renewable_capacities:
     enable: false
@@ -253,12 +234,7 @@ renewable:
       add_cutout_windspeed: true
     # ScholzPhd Tab 4.3.1: 10MW/km^2
     capacity_per_sqkm: 4
-    # correction_factor: 0.8855 # default
-    # correction_factor: 0.906 # glaum
-    correction_factor: 1 # ellyess
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
+    correction_factor: 0.8855 # default
     corine: [44, 255]
     natura: true
     ship_threshold: 400
@@ -278,21 +254,6 @@ renewable:
         azimuth: 180.
     capacity_per_sqkm: 5.1
     # correction_factor: 0.854337
-    corine: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 26, 31, 32]
-    luisa: false # [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242, 1310, 1320, 1330, 1410, 1421, 1422, 2110, 2120, 2130, 2210, 2220, 2230, 2310, 2410, 2420, 3210, 3320, 3330]
-    natura: true
-    excluder_resolution: 100
-    clip_p_max_pu: 1.e-2
-  solar-hsat:
-    cutout: europe-2013-sarah3-era5
-    resource:
-      method: pv
-      panel: CSi
-      orientation:
-        slope: 35.
-        azimuth: 180.
-      tracking: horizontal
-    capacity_per_sqkm: 4.43 # 15% higher land usage acc. to NREL
     corine: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 26, 31, 32]
     luisa: false # [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242, 1310, 1320, 1330, 1410, 1421, 1422, 2110, 2120, 2130, 2210, 2220, 2230, 2310, 2410, 2420, 3210, 3320, 3330]
     natura: true
@@ -399,7 +360,6 @@ pypsa_eur:
   - offwind-ac
   - offwind-dc
   - offwind-float
-  - solar-hsat
   - solar
   - ror
   - nuclear

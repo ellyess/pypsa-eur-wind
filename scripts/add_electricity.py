@@ -888,6 +888,421 @@ def estimate_renewable_capacities(
             n.generators.loc[tech_i, "p_nom_max"] = (
                 expansion_limit * n.generators.loc[tech_i, "p_nom_min"]
             )
+    
+    
+def attach_storageunits(n, costs, extendable_carriers, max_hours):
+    carriers = extendable_carriers["StorageUnit"]
+
+    n.add("Carrier", carriers)
+
+    buses_i = n.buses.index
+
+    lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
+    lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
+
+    for carrier in carriers:
+        roundtrip_correction = 0.5 if carrier == "battery" else 1
+
+        n.add(
+            "StorageUnit",
+            buses_i,
+            " " + carrier,
+            bus=buses_i,
+            carrier=carrier,
+            p_nom_extendable=True,
+            capital_cost=costs.at[carrier, "capital_cost"],
+            marginal_cost=costs.at[carrier, "marginal_cost"],
+            efficiency_store=costs.at[lookup_store[carrier], "efficiency"]
+            ** roundtrip_correction,
+            efficiency_dispatch=costs.at[lookup_dispatch[carrier], "efficiency"]
+            ** roundtrip_correction,
+            max_hours=max_hours[carrier],
+            cyclic_state_of_charge=True,
+        )
+
+
+def attach_stores(n, costs, extendable_carriers):
+    carriers = extendable_carriers["Store"]
+
+    n.add("Carrier", carriers)
+
+    buses_i = n.buses.index
+
+    if "H2" in carriers:
+        h2_buses_i = n.add("Bus", buses_i + " H2", carrier="H2", location=buses_i)
+
+        n.add(
+            "Store",
+            h2_buses_i,
+            bus=h2_buses_i,
+            carrier="H2",
+            e_nom_extendable=True,
+            e_cyclic=True,
+            capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
+        )
+
+        n.add(
+            "Link",
+            h2_buses_i + " Electrolysis",
+            bus0=buses_i,
+            bus1=h2_buses_i,
+            carrier="H2 electrolysis",
+            p_nom_extendable=True,
+            efficiency=costs.at["electrolysis", "efficiency"],
+            capital_cost=costs.at["electrolysis", "capital_cost"],
+            marginal_cost=costs.at["electrolysis", "marginal_cost"],
+        )
+
+        n.add(
+            "Link",
+            h2_buses_i + " Fuel Cell",
+            bus0=h2_buses_i,
+            bus1=buses_i,
+            carrier="H2 fuel cell",
+            p_nom_extendable=True,
+            efficiency=costs.at["fuel cell", "efficiency"],
+            # NB: fixed cost is per MWel
+            capital_cost=costs.at["fuel cell", "capital_cost"]
+            * costs.at["fuel cell", "efficiency"],
+            marginal_cost=costs.at["fuel cell", "marginal_cost"],
+        )
+
+    if "battery" in carriers:
+        b_buses_i = n.add(
+            "Bus", buses_i + " battery", carrier="battery", location=buses_i
+        )
+
+        n.add(
+            "Store",
+            b_buses_i,
+            bus=b_buses_i,
+            carrier="battery",
+            e_cyclic=True,
+            e_nom_extendable=True,
+            capital_cost=costs.at["battery storage", "capital_cost"],
+            marginal_cost=costs.at["battery", "marginal_cost"],
+        )
+
+        n.add("Carrier", ["battery charger", "battery discharger"])
+
+        n.add(
+            "Link",
+            b_buses_i + " charger",
+            bus0=buses_i,
+            bus1=b_buses_i,
+            carrier="battery charger",
+            # the efficiencies are "round trip efficiencies"
+            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
+            capital_cost=costs.at["battery inverter", "capital_cost"],
+            p_nom_extendable=True,
+            marginal_cost=costs.at["battery inverter", "marginal_cost"],
+        )
+
+        n.add(
+            "Link",
+            b_buses_i + " discharger",
+            bus0=b_buses_i,
+            bus1=buses_i,
+            carrier="battery discharger",
+            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
+            p_nom_extendable=True,
+            marginal_cost=costs.at["battery inverter", "marginal_cost"],
+        )
+
+####
+def add_wake_generators(method):
+    # filtering only offwind and getting region number
+    mapping = (
+            n.generators.filter(like="offwind", axis=0)
+            .index.to_series()
+            .str.replace(" offwind-\w+", "", regex=True)
+        )
+    wake_generators = n.generators.loc[mapping.index,:]
+
+    ### seperate
+    if method == 'ellyess':
+        # loading region file to use the regional area
+        
+        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+        # if threshold < 5000000:
+        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["run"].get("prefix"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+
+        
+        
+        print(offshore_reg)
+        # split_type = str(snakemake.config["wake_effect"].get("split_region"))
+        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
+        wake_generators['regions'] = mapping
+        wake_generators = wake_generators.merge(
+                offshore_reg[['area']], right_index=True, left_on="regions"
+                )
+        
+        # wake_generators["factor_wake_1"] = (0.7 * 0 + 10.65)/100
+        # wake_generators["factor_wake_2"] = (0.7 * 1 + 10.65)/100 - wake_generators["factor_wake_1"]
+        # wake_generators["factor_wake_3"] = (0.7 * 2 + 10.65)/100 - (wake_generators["factor_wake_1"]+wake_generators["factor_wake_2"])
+        # wake_generators["factor_wake_4"] = (0.7 * 3 + 10.65)/100 - (wake_generators["factor_wake_1"]+wake_generators["factor_wake_2"]+wake_generators["factor_wake_3"])
+        wake_generators["factor_wake_1"] = (0.7 * 1 + 10.65)/100
+        wake_generators["factor_wake_2"] = (0.7 * 3 + 10.65)/100
+        wake_generators["factor_wake_3"] = (0.7 * 5 + 10.65)/100
+        wake_generators["factor_wake_4"] = (0.7 * 7 + 10.65)/100
+        wake_generators["max_capacity_1"] = wake_generators["area"]
+        wake_generators["max_capacity_2"] = wake_generators["area"]
+        wake_generators["max_capacity_3"] = wake_generators["area"]
+        # wake_generators["max_capacity_1"] = 1*wake_generators["area"]
+        # wake_generators["max_capacity_2"] = 2*wake_generators["area"]
+        # wake_generators["max_capacity_3"] = 3*wake_generators["area"]
+        wake_generators["max_capacity_4"] = np.inf
+        
+        #     offshore_reg["factor_wake_1"] = (0.7 * (0) + 10.65)/100
+#     offshore_reg["factor_wake_2"] = (0.7 * (1) + 10.65)/100
+#     offshore_reg["factor_wake_3"] = (0.7 * (2) + 10.65)/100
+#     offshore_reg["factor_wake_4"] = (0.7 * (3) + 10.65)/100
+        
+        split_generators = {
+            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
+            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            4: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
+        }
+    
+    #### Glaum
+    elif method == 'glaum':
+        # n.generators.loc[mapping.index, "p_nom_max"] = n.generators.loc[mapping.index, "p_nom_max"] * 0.906
+        n.generators_t.p_max_pu.loc[:,mapping.index] = n.generators_t.p_max_pu.loc[:,mapping.index]  * 0.906
+        
+        # only apply wake effect for generators greater than 2GW
+        wake_generators = wake_generators[wake_generators.p_nom_max > 2e3]
+        # wake_generators["factor_wake_1"] = 0
+        # wake_generators["factor_wake_2"] = 0.1279732
+        # wake_generators["factor_wake_3"] = 0.13902848
+        wake_generators["factor_wake_1"] = 0
+        wake_generators["factor_wake_2"] = 0.1279732
+        wake_generators["factor_wake_3"] = (1 - ((1-0.1279732)*(1-0.13902848)))
+        wake_generators["max_capacity_1"] = 2e3
+        wake_generators["max_capacity_2"] = 10e3
+        wake_generators["max_capacity_3"] = np.inf
+        split_generators = {
+            2: wake_generators[wake_generators.p_nom_max <= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
+            3: wake_generators[wake_generators.p_nom_max > (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
+        }
+    
+    generators_to_add = list()
+    generators_t_to_add = list()
+    generators_to_add_labels = list()
+    generators_to_drop = list()
+
+    # split generators into multiple generators with different time series
+    for num, df in split_generators.items():
+        for generator_i in df.index:
+            generators_to_drop.append(generator_i)
+            used_capacity = 0
+            p_nom = 0
+            for i in range(1, num + 1):
+                generator = df.loc[generator_i].copy()
+                generator_t = n.generators_t.p_max_pu.loc[:, generator_i].copy()
+                if used_capacity + generator["max_capacity_" +str(i)] <= generator.p_nom_max:
+                    generator["p_nom_max"] = generator["max_capacity_" +str(i)]
+                    used_capacity += generator["max_capacity_" +str(i)]
+                else:
+                    generator.p_nom_max = generator.p_nom_max - used_capacity
+                    used_capacity = generator.p_nom_max
+                # adjust p_nom of the generators that the sum of the split generators is equal to the original p_nom
+                if p_nom != generator.p_nom:
+                    if generator["max_capacity_" +str(i)] < generator.p_nom - p_nom:
+                        generator["p_nom"] = generator["max_capacity_" +str(i)]
+                        generator["p_nom_min"] = generator["max_capacity_" +str(i)]
+                    else:
+                        generator["p_nom"] = generator["p_nom"] - p_nom
+                        generator["p_nom_min"] = generator["p_nom_min"] - p_nom
+                elif p_nom == generator["p_nom"]:
+                    generator["p_nom"] = 0
+                    generator["p_nom_min"] = 0
+                p_nom += generator["p_nom"]
+                generators_to_add_labels.append(generator_i + " w" + str(i))
+                generators_to_add.append(generator)
+                generators_t_to_add.append(generator_t * (1 - generator["factor_wake_" +str(i)]))
+    # delete original generators and add split generators
+    n.generators.drop(index=generators_to_drop, inplace=True)
+    n.generators_t.p_max_pu.drop(columns=generators_to_drop, inplace=True)
+    # add wake effect generators
+    n.generators = pd.concat(
+        [
+            n.generators,
+            pd.concat(
+                generators_to_add, axis=1, keys=generators_to_add_labels
+            ).T.infer_objects(),
+        ],
+        axis=0,
+    )
+    n.generators_t.p_max_pu = pd.concat(
+        [
+            n.generators_t.p_max_pu,
+            pd.concat(generators_t_to_add, axis=1, keys=generators_to_add_labels),
+        ],
+        axis=1,
+    )
+    n.generators_t.p_max_pu.columns.names = ["Generator"]
+    ########
+
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
+
+        snakemake = mock_snakemake("add_electricity", clusters=100)
+    configure_logging(snakemake)
+    set_scenario_config(snakemake)
+
+    params = snakemake.params
+    max_hours = params.electricity["max_hours"]
+    landfall_lengths = {
+        tech: settings["landfall_length"]
+        for tech, settings in params.renewable.items()
+        if "landfall_length" in settings.keys()
+    }
+
+    n = pypsa.Network(snakemake.input.base_network)
+
+    time = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
+    n.set_snapshots(time)
+
+    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+
+    costs = load_costs(
+        snakemake.input.tech_costs,
+        params.costs,
+        max_hours,
+        Nyears,
+    )
+
+    ppl = load_and_aggregate_powerplants(
+        snakemake.input.powerplants,
+        costs,
+        params.consider_efficiency_classes,
+        params.aggregation_strategies,
+        params.exclude_carriers,
+    )
+
+    attach_load(
+        n,
+        snakemake.input.load,
+        snakemake.input.busmap,
+        params.scaling_factor,
+    )
+
+    set_transmission_costs(
+        n,
+        costs,
+        params.line_length_factor,
+        params.link_length_factor,
+    )
+
+    renewable_carriers = set(params.electricity["renewable_carriers"])
+    extendable_carriers = params.electricity["extendable_carriers"]
+    conventional_carriers = params.electricity["conventional_carriers"]
+    conventional_inputs = {
+        k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
+    }
+
+    if params.conventional["unit_commitment"]:
+        unit_commitment = pd.read_csv(snakemake.input.unit_commitment, index_col=0)
+    else:
+        unit_commitment = None
+
+    if params.conventional["dynamic_fuel_price"]:
+        fuel_price = pd.read_csv(
+            snakemake.input.fuel_price, index_col=0, header=0, parse_dates=True
+        )
+        fuel_price = fuel_price.reindex(n.snapshots).ffill()
+    else:
+        fuel_price = None
+
+    attach_conventional_generators(
+        n,
+        costs,
+        ppl,
+        conventional_carriers,
+        extendable_carriers,
+        params.conventional,
+        conventional_inputs,
+        unit_commitment=unit_commitment,
+        fuel_price=fuel_price,
+    )
+
+    attach_wind_and_solar(
+        n,
+        costs,
+        snakemake.input,
+        renewable_carriers,
+        extendable_carriers,
+        params.line_length_factor,
+        landfall_lengths,
+    )
+    
+    if "hydro" in renewable_carriers:
+        p = params.renewable["hydro"]
+        carriers = p.pop("carriers", [])
+        attach_hydro(
+            n,
+            costs,
+            ppl,
+            snakemake.input.profile_hydro,
+            snakemake.input.hydro_capacities,
+            carriers,
+            **p,
+        )
+
+    estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
+    if estimate_renewable_caps["enable"]:
+        if params.foresight != "overnight":
+            logger.info(
+                "Skipping renewable capacity estimation because they are added later "
+                "in rule `add_existing_baseyear` with foresight mode 'myopic'."
+            )
+        else:
+            tech_map = estimate_renewable_caps["technology_mapping"]
+            expansion_limit = estimate_renewable_caps["expansion_limit"]
+            year = estimate_renewable_caps["year"]
+
+            if estimate_renewable_caps["from_opsd"]:
+                attach_OPSD_renewables(n, tech_map)
+
+            estimate_renewable_capacities(
+                n, year, tech_map, expansion_limit, params.countries
+            )
+
+    update_p_nom_max(n)
+
+    # if snakemake.config["wake_effect"].get("type") == "glaum":
+    #     add_wake_generators_glaum()
+    # elif snakemake.config["wake_effect"].get("type") == "ellyess":
+    #     add_wake_generators_ellyess()
+    
+    wake_model = str(snakemake.config["offshore_mods"].get("wake_model"))
+    if wake_model != "base":
+        if wake_model == "standard":
+            mapping = (
+                n.generators.filter(like="offwind", axis=0)
+                .index.to_series()
+                .str.replace(" offwind-\w+", "", regex=True)
+            )
+            # n.generators.loc[mapping.index, "p_nom_max"] = n.generators.loc[mapping.index, "p_nom_max"] * 0.8855
+            n.generators_t.p_max_pu.loc[:,mapping.index] = n.generators_t.p_max_pu.loc[:,mapping.index]  * 0.8855
+        else:
+            add_wake_generators(wake_model)
+
+            
+    attach_storageunits(n, costs, extendable_carriers, max_hours)
+    attach_stores(n, costs, extendable_carriers)
+
+    sanitize_carriers(n, snakemake.config)
+    if "location" in n.buses:
+        sanitize_locations(n)
+
+    n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.export_to_netcdf(snakemake.output[0])
+
+
 
 # def add_wake_generators_glaum():
 #     mapping = (
@@ -1090,393 +1505,3 @@ def estimate_renewable_capacities(
 #         component, x.name, attr, x
 #     )
 #     return v
-    
-    
-def attach_storageunits(n, costs, extendable_carriers, max_hours):
-    carriers = extendable_carriers["StorageUnit"]
-
-    n.add("Carrier", carriers)
-
-    buses_i = n.buses.index
-
-    lookup_store = {"H2": "electrolysis", "battery": "battery inverter"}
-    lookup_dispatch = {"H2": "fuel cell", "battery": "battery inverter"}
-
-    for carrier in carriers:
-        roundtrip_correction = 0.5 if carrier == "battery" else 1
-
-        n.add(
-            "StorageUnit",
-            buses_i,
-            " " + carrier,
-            bus=buses_i,
-            carrier=carrier,
-            p_nom_extendable=True,
-            capital_cost=costs.at[carrier, "capital_cost"],
-            marginal_cost=costs.at[carrier, "marginal_cost"],
-            efficiency_store=costs.at[lookup_store[carrier], "efficiency"]
-            ** roundtrip_correction,
-            efficiency_dispatch=costs.at[lookup_dispatch[carrier], "efficiency"]
-            ** roundtrip_correction,
-            max_hours=max_hours[carrier],
-            cyclic_state_of_charge=True,
-        )
-
-
-def attach_stores(n, costs, extendable_carriers):
-    carriers = extendable_carriers["Store"]
-
-    n.add("Carrier", carriers)
-
-    buses_i = n.buses.index
-
-    if "H2" in carriers:
-        h2_buses_i = n.add("Bus", buses_i + " H2", carrier="H2", location=buses_i)
-
-        n.add(
-            "Store",
-            h2_buses_i,
-            bus=h2_buses_i,
-            carrier="H2",
-            e_nom_extendable=True,
-            e_cyclic=True,
-            capital_cost=costs.at["hydrogen storage underground", "capital_cost"],
-        )
-
-        n.add(
-            "Link",
-            h2_buses_i + " Electrolysis",
-            bus0=buses_i,
-            bus1=h2_buses_i,
-            carrier="H2 electrolysis",
-            p_nom_extendable=True,
-            efficiency=costs.at["electrolysis", "efficiency"],
-            capital_cost=costs.at["electrolysis", "capital_cost"],
-            marginal_cost=costs.at["electrolysis", "marginal_cost"],
-        )
-
-        n.add(
-            "Link",
-            h2_buses_i + " Fuel Cell",
-            bus0=h2_buses_i,
-            bus1=buses_i,
-            carrier="H2 fuel cell",
-            p_nom_extendable=True,
-            efficiency=costs.at["fuel cell", "efficiency"],
-            # NB: fixed cost is per MWel
-            capital_cost=costs.at["fuel cell", "capital_cost"]
-            * costs.at["fuel cell", "efficiency"],
-            marginal_cost=costs.at["fuel cell", "marginal_cost"],
-        )
-
-    if "battery" in carriers:
-        b_buses_i = n.add(
-            "Bus", buses_i + " battery", carrier="battery", location=buses_i
-        )
-
-        n.add(
-            "Store",
-            b_buses_i,
-            bus=b_buses_i,
-            carrier="battery",
-            e_cyclic=True,
-            e_nom_extendable=True,
-            capital_cost=costs.at["battery storage", "capital_cost"],
-            marginal_cost=costs.at["battery", "marginal_cost"],
-        )
-
-        n.add("Carrier", ["battery charger", "battery discharger"])
-
-        n.add(
-            "Link",
-            b_buses_i + " charger",
-            bus0=buses_i,
-            bus1=b_buses_i,
-            carrier="battery charger",
-            # the efficiencies are "round trip efficiencies"
-            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
-            capital_cost=costs.at["battery inverter", "capital_cost"],
-            p_nom_extendable=True,
-            marginal_cost=costs.at["battery inverter", "marginal_cost"],
-        )
-
-        n.add(
-            "Link",
-            b_buses_i + " discharger",
-            bus0=b_buses_i,
-            bus1=buses_i,
-            carrier="battery discharger",
-            efficiency=costs.at["battery inverter", "efficiency"] ** 0.5,
-            p_nom_extendable=True,
-            marginal_cost=costs.at["battery inverter", "marginal_cost"],
-        )
-
-####
-def add_wake_generators(method):
-    # filtering only offwind and getting region number
-    mapping = (
-            n.generators.filter(like="offwind", axis=0)
-            .index.to_series()
-            .str.replace(" offwind-\w+", "", regex=True)
-        )
-    wake_generators = n.generators.loc[mapping.index,:]
-
-    ### seperate
-    if method == 'ellyess':
-        # loading region file to use the regional area
-        
-        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-        if threshold < 5000000:
-            offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-        
-        
-        print(offshore_reg)
-        # split_type = str(snakemake.config["wake_effect"].get("split_region"))
-        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
-        wake_generators['regions'] = mapping
-        wake_generators = wake_generators.merge(
-                offshore_reg[['area']], right_index=True, left_on="regions"
-                )
-        
-        wake_generators["factor_wake_1"] = (0.7 * (0) + 10.65)/100
-        wake_generators["factor_wake_2"] = (0.7 * (1) + 10.65)/100
-        wake_generators["factor_wake_3"] = (0.7 * (2) + 10.65)/100
-        wake_generators["factor_wake_4"] = (0.7 * (3) + 10.65)/100
-        wake_generators["max_capacity_1"] = 1*wake_generators["area"]
-        wake_generators["max_capacity_2"] = 2*wake_generators["area"]
-        wake_generators["max_capacity_3"] = 3*wake_generators["area"]
-        wake_generators["max_capacity_4"] = np.inf
-        
-        print(wake_generators)
-        split_generators = {
-            1: wake_generators[wake_generators.p_nom_max <= wake_generators.max_capacity_1],
-            2: wake_generators[(wake_generators.p_nom_max > wake_generators.max_capacity_1) & (wake_generators.p_nom_max <= (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            3: wake_generators[(wake_generators.p_nom_max > (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max <= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            4: wake_generators[wake_generators.p_nom_max > (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
-    
-    #### Glaum
-    elif method == 'glaum':
-        # only apply wake effect for generators greater than 2GW
-        wake_generators = wake_generators[wake_generators.p_nom_max > 2e3]
-        wake_generators["factor_wake_1"] = 0
-        wake_generators["factor_wake_2"] = 0.1279732
-        wake_generators["factor_wake_3"] = 0.13902848
-        wake_generators["max_capacity_1"] = 2e3
-        wake_generators["max_capacity_2"] = 10e3
-        wake_generators["max_capacity_3"] = np.inf
-        split_generators = {
-            2: wake_generators[wake_generators.p_nom_max <= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-            3: wake_generators[wake_generators.p_nom_max > (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
-    
-    generators_to_add = list()
-    generators_t_to_add = list()
-    generators_to_add_labels = list()
-    generators_to_drop = list()
-
-    # split generators into multiple generators with different time series
-    for num, df in split_generators.items():
-        for generator_i in df.index:
-            generators_to_drop.append(generator_i)
-            used_capacity = 0
-            p_nom = 0
-            for i in range(1, num + 1):
-                generator = df.loc[generator_i].copy()
-                generator_t = n.generators_t.p_max_pu.loc[:, generator_i].copy()
-                if used_capacity + generator["max_capacity_" +str(i)] <= generator.p_nom_max:
-                    generator["p_nom_max"] = generator["max_capacity_" +str(i)]
-                    used_capacity += generator["max_capacity_" +str(i)]
-                else:
-                    generator.p_nom_max = generator.p_nom_max - used_capacity
-                    used_capacity = generator.p_nom_max
-                # adjust p_nom of the generators that the sum of the split generators is equal to the original p_nom
-                if p_nom != generator.p_nom:
-                    if generator["max_capacity_" +str(i)] < generator.p_nom - p_nom:
-                        generator["p_nom"] = generator["max_capacity_" +str(i)]
-                        generator["p_nom_min"] = generator["max_capacity_" +str(i)]
-                    else:
-                        generator["p_nom"] = generator["p_nom"] - p_nom
-                        generator["p_nom_min"] = generator["p_nom_min"] - p_nom
-                elif p_nom == generator["p_nom"]:
-                    generator["p_nom"] = 0
-                    generator["p_nom_min"] = 0
-                p_nom += generator["p_nom"]
-                generators_to_add_labels.append(generator_i + " w" + str(i))
-                generators_to_add.append(generator)
-                generators_t_to_add.append(generator_t * (1 - generator["factor_wake_" +str(i)]))
-    # delete original generators and add split generators
-    n.generators.drop(index=generators_to_drop, inplace=True)
-    n.generators_t.p_max_pu.drop(columns=generators_to_drop, inplace=True)
-    # add wake effect generators
-    n.generators = pd.concat(
-        [
-            n.generators,
-            pd.concat(
-                generators_to_add, axis=1, keys=generators_to_add_labels
-            ).T.infer_objects(),
-        ],
-        axis=0,
-    )
-    n.generators_t.p_max_pu = pd.concat(
-        [
-            n.generators_t.p_max_pu,
-            pd.concat(generators_t_to_add, axis=1, keys=generators_to_add_labels),
-        ],
-        axis=1,
-    )
-    n.generators_t.p_max_pu.columns.names = ["Generator"]
-    ########
-
-if __name__ == "__main__":
-    if "snakemake" not in globals():
-        from _helpers import mock_snakemake
-
-        snakemake = mock_snakemake("add_electricity", clusters=100)
-    configure_logging(snakemake)
-    set_scenario_config(snakemake)
-
-    params = snakemake.params
-    max_hours = params.electricity["max_hours"]
-    landfall_lengths = {
-        tech: settings["landfall_length"]
-        for tech, settings in params.renewable.items()
-        if "landfall_length" in settings.keys()
-    }
-
-    n = pypsa.Network(snakemake.input.base_network)
-
-    time = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
-    n.set_snapshots(time)
-
-    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
-
-    costs = load_costs(
-        snakemake.input.tech_costs,
-        params.costs,
-        max_hours,
-        Nyears,
-    )
-
-    ppl = load_and_aggregate_powerplants(
-        snakemake.input.powerplants,
-        costs,
-        params.consider_efficiency_classes,
-        params.aggregation_strategies,
-        params.exclude_carriers,
-    )
-
-    attach_load(
-        n,
-        snakemake.input.load,
-        snakemake.input.busmap,
-        params.scaling_factor,
-    )
-
-    set_transmission_costs(
-        n,
-        costs,
-        params.line_length_factor,
-        params.link_length_factor,
-    )
-
-    renewable_carriers = set(params.electricity["renewable_carriers"])
-    extendable_carriers = params.electricity["extendable_carriers"]
-    conventional_carriers = params.electricity["conventional_carriers"]
-    conventional_inputs = {
-        k: v for k, v in snakemake.input.items() if k.startswith("conventional_")
-    }
-
-    if params.conventional["unit_commitment"]:
-        unit_commitment = pd.read_csv(snakemake.input.unit_commitment, index_col=0)
-    else:
-        unit_commitment = None
-
-    if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            snakemake.input.fuel_price, index_col=0, header=0, parse_dates=True
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).ffill()
-    else:
-        fuel_price = None
-
-    attach_conventional_generators(
-        n,
-        costs,
-        ppl,
-        conventional_carriers,
-        extendable_carriers,
-        params.conventional,
-        conventional_inputs,
-        unit_commitment=unit_commitment,
-        fuel_price=fuel_price,
-    )
-
-    attach_wind_and_solar(
-        n,
-        costs,
-        snakemake.input,
-        renewable_carriers,
-        extendable_carriers,
-        params.line_length_factor,
-        landfall_lengths,
-    )
-    
-    # if snakemake.config["wake_effect"].get("type") == "glaum":
-    #     add_wake_generators_glaum()
-    # elif snakemake.config["wake_effect"].get("type") == "ellyess":
-    #     add_wake_generators_ellyess()
-
-    if "hydro" in renewable_carriers:
-        p = params.renewable["hydro"]
-        carriers = p.pop("carriers", [])
-        attach_hydro(
-            n,
-            costs,
-            ppl,
-            snakemake.input.profile_hydro,
-            snakemake.input.hydro_capacities,
-            carriers,
-            **p,
-        )
-
-    estimate_renewable_caps = params.electricity["estimate_renewable_capacities"]
-    if estimate_renewable_caps["enable"]:
-        if params.foresight != "overnight":
-            logger.info(
-                "Skipping renewable capacity estimation because they are added later "
-                "in rule `add_existing_baseyear` with foresight mode 'myopic'."
-            )
-        else:
-            tech_map = estimate_renewable_caps["technology_mapping"]
-            expansion_limit = estimate_renewable_caps["expansion_limit"]
-            year = estimate_renewable_caps["year"]
-
-            if estimate_renewable_caps["from_opsd"]:
-                attach_OPSD_renewables(n, tech_map)
-
-            estimate_renewable_capacities(
-                n, year, tech_map, expansion_limit, params.countries
-            )
-
-    update_p_nom_max(n)
-
-    # if snakemake.config["wake_effect"].get("type") == "glaum":
-    #     add_wake_generators_glaum()
-    # elif snakemake.config["wake_effect"].get("type") == "ellyess":
-    #     add_wake_generators_ellyess()
-    
-    wake_model = str(snakemake.config["offshore_mods"].get("wake_model"))
-    if wake_model != "base":
-        add_wake_generators(wake_model)
-
-            
-    attach_storageunits(n, costs, extendable_carriers, max_hours)
-    attach_stores(n, costs, extendable_carriers)
-
-    sanitize_carriers(n, snakemake.config)
-    if "location" in n.buses:
-        sanitize_locations(n)
-
-    n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
-    n.export_to_netcdf(snakemake.output[0])

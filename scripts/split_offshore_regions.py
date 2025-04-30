@@ -7,13 +7,14 @@ from scipy.spatial import Voronoi
 from sklearn.cluster import KMeans
 
 from shapely.geometry import box, Polygon, MultiPolygon, GeometryCollection, Point
+from _helpers import configure_logging, set_scenario_config
 
-# def calculate_area(shape, ellipsoid="WGS84"):
-#     """
-#     Calculates area in km².
-#     """
-#     geod = Geod(ellps=ellipsoid)
-#     return abs(geod.geometry_area_perimeter(shape)[0]) / 1e6
+def calculate_area(shape, ellipsoid="WGS84"):
+    """
+    Calculates area in km².
+    """
+    geod = Geod(ellps=ellipsoid)
+    return abs(geod.geometry_area_perimeter(shape)[0]) / 1e6
 
 def cluster_points(n_clusters, point_list):
     """
@@ -25,8 +26,7 @@ def cluster_points(n_clusters, point_list):
     cluster_centers = np.array(kmeans.cluster_centers_)
     return cluster_centers
 
-def fill_shape_with_points(shape, oversize_factor, num=50): # pre 11/04/2025
-# def fill_shape_with_points(shape, oversize_factor, num=100):
+def fill_shape_with_points(shape, oversize_factor, num=10):
     """
     Fills the shape of the offshore region with points. This is needed for
     splitting the regions into smaller regions.
@@ -36,8 +36,8 @@ def fill_shape_with_points(shape, oversize_factor, num=50): # pre 11/04/2025
     x_min, y_min, x_max, y_max = shape.bounds
     iteration = 0
     while True:
-        for x in np.linspace(x_min, x_max, num=num):
-            for y in np.linspace(y_min, y_max, num=num):
+        for x in np.linspace(x_min, x_max, num=num*int(np.ceil(oversize_factor/4))):
+            for y in np.linspace(y_min, y_max, num=num*int(np.ceil(oversize_factor/4))):
                 if Point(x, y).within(shape):
                     inner_points.append((x, y))
         if len(inner_points) > oversize_factor:
@@ -113,9 +113,8 @@ def voronoi_partition_pts(points, outline):
     return final_result
 
 
-def mesh_region(region, threshold):
-    geometry = region.geometry
-    area = region["area"]
+def mesh_region(geometry, threshold):
+    area = calculate_area(geometry)
     if area < threshold:
         return [geometry]
     else: 
@@ -127,13 +126,12 @@ def mesh_region(region, threshold):
 
 def split_regions(regions,threshold):
     """Split all regional polygons into multiple parts across it's shortest dimension"""
-    regions["area"] = regions.to_crs({'proj':'cea'}).area / 10**6
     splits = []
     for i, region in regions.iterrows():
         inner_regions = gpd.GeoDataFrame({
                 'bus_main':region.iloc[0],
                 'geometry':gpd.GeoSeries(
-                    mesh_region(region, threshold),
+                    mesh_region(region.geometry, threshold),
                     crs=4326
                     ),
             })
@@ -144,61 +142,29 @@ def split_regions(regions,threshold):
     
     regions_split["name"] = regions_split["bus_main"].astype(str) +  "_" + regions_split["region"]
     regions_split['country'] = regions_split['bus_main'].str[:2]
-    regions_split["area"] = regions_split.to_crs({'proj':'cea'}).area / 10**6
-    return regions_split[['name','bus_main','country','geometry','area']]
 
+    return regions_split[['name','bus_main','country','geometry']]
+  
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
 
-# def split_regions(regions,threshold,max_area):
-#     """Split all regional polygons into multiple parts across it's shortest dimension"""
+        snakemake = mock_snakemake(
+            "split_offshore_regions", clusters=38, splits=10000
+        )
+    configure_logging(snakemake)
+    set_scenario_config(snakemake)
     
-#     if threshold >= max_area:
-#         max_area = threshold
-
-#     splits = []
-#     for i, region in regions.iterrows():
-#         inner_regions = gpd.GeoDataFrame({
-#                 'bus_main':region.iloc[0],
-#                 'geometry':gpd.GeoSeries(
-#                     mesh_region(region.geometry, max_area),
-#                     crs=4326
-#                     ),
-#             })
-#         splits.append(inner_regions)
+    splits = snakemake.params.mods["region_area_threshold"]
+    for which in ["regions_onshore", "regions_offshore"]:
+        regions = gpd.read_file(snakemake.input[which])
         
-#     regions_split = gpd.pd.concat(splits,ignore_index=True)
-#     regions_split["region_main"] = regions_split.groupby("bus_main").cumcount().astype(str) #+ regions_split.index.astype(str)
-#     regions_split["region"] = regions_split["region_main"].str.zfill(5)
-    
-#     splits = []
-#     if (threshold < max_area):
-#         sea_shape = gpd.read_file('data/north_sea_shape_updated.geojson')
-#         splits = []
-#         for i, region in regions_split.iterrows():
-#             if region.geometry.intersects(sea_shape.geometry.union_all()):
-#                 inner_regions = gpd.GeoDataFrame({
-#                     'bus_main':region.bus_main,
-#                     'region_main':region.region_main,
-#                     'geometry':gpd.GeoSeries(
-#                         mesh_region(region.geometry, threshold),
-#                         crs=4326
-#                         ),
-#                 })
-#             else:
-#                 inner_regions = gpd.GeoDataFrame({
-#                     'bus_main':region.bus_main,
-#                     'region_main':region.region_main,
-#                     'geometry':gpd.GeoSeries(
-#                         [region.geometry],
-#                         crs=4326
-#                         ),
-#                 })
-#             splits.append(inner_regions)
+        if which == "regions_offshore":
+            regions_split = split_regions(regions,splits)
+            regions_split["area"] = regions_split.geometry.to_crs(3035).area / 1e6
+            regions_split.to_file(snakemake.output[0])
             
-#         regions_split = gpd.pd.concat(splits,ignore_index=True)
-#         regions_split["region"] = (regions_split["region_main"] + regions_split.groupby(["bus_main","region_main"]).cumcount().astype(str)).str.zfill(5)
-        
-#     regions_split["name"] = regions_split["bus_main"].astype(str) +  "_" + regions_split["region"]
-#     regions_split['country'] = regions_split['bus_main'].str[:2]
-#     regions_split["region_main"] = regions_split["bus_main"].astype(str) +  "_" + regions_split["region_main"].str.zfill(5)
-
-#     return regions_split[['name','region_main','bus_main','country','geometry']]
+        else:
+            regions["area"] = regions.geometry.to_crs(3035).area / 1e6
+            regions.to_file(snakemake.output[1])
+            

@@ -156,7 +156,10 @@ if __name__ == "__main__":
     buffer = 9000  # meters
     eastern_countries = ["FI", "EE", "LT", "LV", "PL", "SK", "HU", "RO"]
     add_buffer_b = regions.index.str[:2].isin(eastern_countries)
-    regions.loc[add_buffer_b] = (
+    print(regions.loc[add_buffer_b])
+    print("SPLIT")
+    print(regions[add_buffer_b].geometry.to_crs(3035).buffer(buffer).to_crs(4326))
+    regions.loc[add_buffer_b].geometry = (
         regions[add_buffer_b].to_crs(3035).buffer(buffer).to_crs(4326)
     )
 
