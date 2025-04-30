@@ -428,8 +428,8 @@ if __name__ == "__main__":
         if which == "regions_offshore":
             
             # to cluster North Sea
-            # sea_shape = gpd.read_file('data/north_sea_shape_updated.geojson')
-            # clustered_regions = clustered_regions.clip(sea_shape).reset_index(drop=True)
+            sea_shape = gpd.read_file('data/north_sea_shape_updated.geojson')
+            clustered_regions = clustered_regions.clip(sea_shape).reset_index(drop=True)
             
             threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
             

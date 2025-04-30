@@ -20,7 +20,7 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-10-northsea"
+  prefix: "2030-10-northsea-dominantwind"
   name:
   - base-s200000
   - base-s100000
