@@ -20,40 +20,48 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-10-northsea-singlewind"
+  prefix: "2030-10-northsea-combined-6h"
   name:
-  - base-s200000
   - base-s100000
+  - base-s75000
   - base-s50000
   - base-s25000
   - base-s10000
+  - base-s7500
   - base-s5000
+  - base-s2500
   - base-s1000
-  - standard-s200000
   - standard-s100000
+  - standard-s75000
   - standard-s50000
   - standard-s25000
   - standard-s10000
+  - standard-s7500
   - standard-s5000
+  - standard-s2500
   - standard-s1000
-  - ellyess-s200000
-  - ellyess-s100000
-  - ellyess-s50000
-  - ellyess-s25000
-  - ellyess-s10000
-  - ellyess-s5000
-  - ellyess-s1000
-  - glaum-s200000
+  - new_more-s100000
+  - new_more-s75000
+  - new_more-s50000
+  - new_more-s25000
+  - new_more-s10000
+  - new_more-s7500
+  - new_more-s5000
+  - new_more-s2500
+  - new_more-s1000
   - glaum-s100000
+  - glaum-s75000
   - glaum-s50000
   - glaum-s25000
   - glaum-s10000
+  - glaum-s7500
   - glaum-s5000
+  - glaum-s2500
   - glaum-s1000
 
   scenarios:
     enable: true
-    file: config/scenarios.yaml
+    file: config/scenarios-june.yaml
   disable_progressbar: false
   shared_resources:
     policy: base
@@ -81,8 +89,8 @@ scenario:
 countries: ['BE','DK','NL','GB','FR','DE','NO']
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#snapshots
 snapshots:
-  start: "2013-01-01"
-  end: "2014-01-01"
+  start: "2023-01-01"
+  end: "2024-01-01"
   inclusive: 'left'
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#enable
@@ -108,8 +116,11 @@ co2_budget:
 ########### MY ADDDITION
 offshore_mods:
   wake_model: base # base, standard, ellyess, glaum
-  region_area_threshold: 200000 # area of regions
-  max_area: 200000 # max area of all regions
+  mode: single
+  sea_shape: data/north_sea_shape_updated.geojson
+  shared_files: northsea
+  region_area_threshold: 100000 # area of regions
+  max_area: 100000 # max area of all regions
   
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
 electricity:
@@ -133,7 +144,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [offwind-dc, onwind, solar]
+    Generator: [offwind-combined, onwind, solar]
     StorageUnit: [] # battery, H2
     Store: [battery, H2]
     Link: [] # H2 pipeline
@@ -143,7 +154,7 @@ electricity:
   everywhere_powerplants: []
 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
-  renewable_carriers: [solar, onwind, offwind-dc, hydro]
+  renewable_carriers: [solar, onwind, offwind-combined]
 
   estimate_renewable_capacities:
     enable: false
@@ -151,7 +162,7 @@ electricity:
     year: 2020
     expansion_limit: false
     technology_mapping:
-      Offshore: [offwind-dc]
+      Offshore: [offwind-combined]
       Onshore: [onwind]
       PV: [solar]
 
@@ -161,25 +172,25 @@ electricity:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#atlite
 atlite:
-  default_cutout: europe-2013-sarah3-era5
+  default_cutout: europe-2023-sarah3-era5
   nprocesses: 4
   show_progress: false
   cutouts:
     # use 'base' to determine geographical bounds and time span from config
     # base:
       # module: era5
-    europe-2013-sarah3-era5:
+    europe-2023-sarah3-era5:
       module: [sarah, era5] # in priority order
       x: [-12., 42.]
       y: [33., 72.]
       dx: 0.3
       dy: 0.3
-      time: ['2013', '2013']
+      time: ['2023', '2023']
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#renewable
 renewable:
   onwind:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     resource:
       method: wind
       turbine: Vestas_V112_3MW
@@ -198,8 +209,8 @@ renewable:
     natura: true
     excluder_resolution: 100
     clip_p_max_pu: 1.e-2
-  offwind-dc:
-    cutout: europe-2013-sarah3-era5
+  offwind-combined:
+    cutout: europe-2023-sarah3-era5
     resource:
       method: wind
       # turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
@@ -207,8 +218,6 @@ renewable:
       smooth: false
       add_cutout_windspeed: true
     capacity_per_sqkm: 4
-    # correction_factor: 0.8855 # default
-    # correction_factor: 0.906 # glaum
     correction_factor: 1 # ellyess
     corine: [44, 255]
     luisa: false # [0, 5230]
@@ -220,7 +229,7 @@ renewable:
     clip_p_max_pu: 1.e-2
     landfall_length: 10
   solar:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     resource:
       method: pv
       panel: CSi
@@ -235,7 +244,7 @@ renewable:
     excluder_resolution: 100
     clip_p_max_pu: 1.e-2
   hydro:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     carriers: [ror, PHS, hydro]
     PHS_max_hours: 6
     hydro_max_hours: "energy_capacity_totals_by_country" # one of energy_capacity_totals_by_country, estimate_by_large_installations or a float
@@ -332,7 +341,7 @@ pypsa_eur:
   - DC
   Generator:
   - onwind
-  - offwind-dc
+  - offwind-combined
   - solar
   - ror
   - nuclear
@@ -849,7 +858,7 @@ clustering:
       ramp_limit_down: max
   temporal:
     resolution_elec: false
-    resolution_sector: 24h
+    resolution_sector: 6h
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#adjustments
 adjustments:
@@ -1004,6 +1013,7 @@ plotting:
     CCGT: "Combined-Cycle Gas"
     offwind-ac: "Offshore Wind (AC)"
     offwind-dc: "Offshore Wind (DC)"
+    offwind-combined: "Offshore Wind (Combined)"
     offwind-float: "Offshore Wind (Floating)"
     onwind: "Onshore Wind"
     solar: "Solar"
@@ -1032,6 +1042,9 @@ plotting:
     offwind-float: "#b5e2fa"
     offshore wind (Float): "#b5e2fa"
     offshore wind float: "#b5e2fa"
+    offwind-combined: "#74c6f2"
+    offshore wind (Combined): "#74c6f2"
+    offshore wind combined: "#74c6f2"
     # water
     hydro: '#298c81'
     hydro reservoir: '#298c81'

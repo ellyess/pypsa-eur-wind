@@ -20,47 +20,39 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-10-northsea-dominant"
+  prefix: "2030-10-northsea-dominantwind"
   name:
+  # - base-s200000
   # - base-s100000
-  # - base-s75000
   # - base-s50000
   # - base-s25000
   # - base-s10000
-  # - base-s7500
   # - base-s5000
-  # - base-s2500
   # - base-s1000
-  # - standard-s100000
-  # - standard-s75000
-  # - standard-s50000
-  # - standard-s25000
-  # - standard-s10000
-  # - standard-s7500
-  # - standard-s5000
-  # - standard-s2500
-  # - standard-s1000
-  # - new_more-s100000
-  # - new_more-s75000
-  # - new_more-s50000
-  # - new_more-s25000
-  # - new_more-s10000
-  # - new_more-s7500
-  # - new_more-s5000
-  # - new_more-s2500
-  # - new_more-s1000
-  - glaum-s100000
-  - glaum-s75000
-  - glaum-s50000
-  - glaum-s25000
-  - glaum-s10000
-  - glaum-s7500
-  - glaum-s5000
-  - glaum-s2500
-  - glaum-s1000
+  - standard-s200000
+  - standard-s100000
+  - standard-s50000
+  - standard-s25000
+  - standard-s10000
+  - standard-s5000
+  - standard-s1000
+  - new_more-s200000
+  - new_more-s100000
+  - new_more-s50000
+  - new_more-s25000
+  - new_more-s10000
+  - new_more-s5000
+  - new_more-s1000
+  # - glaum-s200000
+  # - glaum-s100000
+  # - glaum-s50000
+  # - glaum-s25000
+  # - glaum-s10000
+  # - glaum-s5000
+  # - glaum-s1000
   scenarios:
     enable: true
-    file: config/scenarios-june.yaml
+    file: config/scenarios.yaml
   disable_progressbar: false
   shared_resources:
     policy: base
@@ -117,9 +109,8 @@ offshore_mods:
   wake_model: base # base, standard, ellyess, glaum
   mode: dominant
   sea_shape: data/north_sea_shape_updated.geojson
-  shared_files: northsea
-  region_area_threshold: 100000 # area of regions
-  max_area: 100000 # max area of all regions
+  region_area_threshold: 200000 # area of regions
+  max_area: 200000 # max area of all regions
   
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
 electricity:
@@ -153,7 +144,7 @@ electricity:
   everywhere_powerplants: []
 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
-  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float]
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float, hydro]
 
   estimate_renewable_capacities:
     enable: false
@@ -171,15 +162,15 @@ electricity:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#atlite
 atlite:
-  default_cutout: europe-2023-sarah3-era5
+  default_cutout: europe-2023-sara3-era5
   nprocesses: 4
   show_progress: false
   cutouts:
     # use 'base' to determine geographical bounds and time span from config
     # base:
-      # module: era5
-    europe-2023-sarah3-era5:
-      module: [sarah, era5] # in priority order
+    #   module: era5
+    europe-2013-2018-era5:
+      module: [era5, sarah] # in priority order
       x: [-12., 42.]
       y: [33., 72.]
       dx: 0.3
@@ -276,8 +267,27 @@ renewable:
     max_depth: 1000
     clip_p_max_pu: 1.e-2
     landfall_length: 10
-  solar:
+  offwind-combined:
     cutout: europe-2023-sarah3-era5
+    resource:
+      method: wind
+      # turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      smooth: false
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1 # ellyess
+    corine: [44, 255]
+    luisa: false # [0, 5230]
+    natura: true
+    ship_threshold: 400
+    max_depth: 1000
+    min_shore_distance: 1000
+    excluder_resolution: 200
+    clip_p_max_pu: 1.e-2
+    landfall_length: 10
+  solar:
+    cutout: europe-2013-sarah3-era5
     resource:
       method: pv
       panel: CSi
@@ -292,7 +302,7 @@ renewable:
     excluder_resolution: 100
     clip_p_max_pu: 1.e-2
   hydro:
-    cutout: europe-2023-sarah3-era5
+    cutout: europe-2013-sarah3-era5
     carriers: [ror, PHS, hydro]
     PHS_max_hours: 6
     hydro_max_hours: "energy_capacity_totals_by_country" # one of energy_capacity_totals_by_country, estimate_by_large_installations or a float
@@ -392,6 +402,7 @@ pypsa_eur:
   - offwind-ac
   - offwind-dc
   - offwind-float
+  - offwind-combined
   - solar
   - ror
   - nuclear
@@ -1088,6 +1099,9 @@ plotting:
     offwind-dc: "#74c6f2"
     offshore wind (DC): "#74c6f2"
     offshore wind dc: "#74c6f2"
+    offwind-combined: "#74c6f2"
+    offshore wind (Combined): "#74c6f2"
+    offshore wind combined: "#74c6f2"
     offwind-float: "#b5e2fa"
     offshore wind (Float): "#b5e2fa"
     offshore wind float: "#b5e2fa"

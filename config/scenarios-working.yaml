@@ -1,0 +1,391 @@
+# -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: : 2017-2023 The PyPSA-Eur Authors
+#
+# SPDX-License-Identifier: MIT
+
+# This file is used to define the scenarios that are run by snakemake. Each entry on the first level is a scenario. Each scenario can contain configuration overrides with respect to the config/config.yaml settings.
+#
+# Example
+#
+# custom-scenario: # name of the scenario
+#   electricity:
+#       renewable_carriers: [wind, solar] # override the list of renewable carriers
+
+#############################################################################
+################################## SPLITTING ################################
+#############################################################################
+
+base-s200000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 200000
+
+
+base-s100000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 100000
+
+
+base-s50000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 50000
+
+
+base-s25000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 25000
+
+
+base-s10000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 10000
+
+
+base-s5000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 5000
+
+
+base-s1000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 1000
+
+
+standard-s200000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 200000
+
+
+standard-s100000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 100000
+
+
+standard-s50000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 50000
+
+
+standard-s25000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 25000
+
+
+standard-s10000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 10000
+
+
+standard-s5000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 5000
+
+
+standard-s1000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 1000
+
+
+ellyess-s200000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 200000
+
+
+ellyess-s100000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 100000
+
+
+ellyess-s50000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 50000
+
+
+ellyess-s25000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 25000
+
+
+ellyess-s10000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 10000
+
+
+ellyess-s5000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 5000
+
+
+ellyess-s1000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 1000
+
+
+glaum-s200000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 200000
+
+
+glaum-s100000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 100000
+
+
+glaum-s50000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 50000
+
+
+glaum-s25000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 25000
+
+
+glaum-s10000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 10000
+
+
+glaum-s5000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 5000
+
+
+glaum-s1000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 1000
+
+newv2-s200000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 200000
+
+
+newv2-s100000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 100000
+
+
+newv2-s50000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 50000
+
+
+newv2-s25000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 25000
+
+
+newv2-s10000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 10000
+
+
+newv2-s5000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 5000
+
+
+newv2-s1000:
+    offshore_mods:
+        wake_model: newv2
+        region_area_threshold: 1000
+
+new_more-s200000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 200000
+
+
+new_more-s100000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 100000
+
+
+new_more-s50000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 50000
+
+
+new_more-s25000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 25000
+
+
+new_more-s10000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 10000
+
+
+new_more-s5000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 5000
+
+
+new_more-s1000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 1000
+
+
+
+
+base-s150000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 150000
+
+
+base-s75000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 75000
+
+
+base-s7500:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 7500
+
+
+base-s2500:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 2500
+
+
+standard-s150000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 150000
+
+
+standard-s75000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 75000
+
+
+standard-s7500:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 7500
+
+
+standard-s2500:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 2500
+
+
+ellyess-s150000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 150000
+
+
+ellyess-s75000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 75000
+
+
+ellyess-s7500:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 7500
+
+
+ellyess-s2500:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 2500
+
+
+new_more-s150000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 150000
+
+
+new_more-s75000:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 75000
+
+
+new_more-s7500:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 7500
+
+
+new_more-s2500:
+    offshore_mods:
+        wake_model: new_more
+        region_area_threshold: 2500
+#############################################################################
+##################################  EUROPE   ################################
+#############################################################################
+
+
+base-s1000000000:
+    offshore_mods:
+        wake_model: base
+        region_area_threshold: 1000000000
+
+
+standard-s1000000000:
+    offshore_mods:
+        wake_model: standard
+        region_area_threshold: 1000000000
+
+
+ellyess-s1000000000:
+    offshore_mods:
+        wake_model: ellyess
+        region_area_threshold: 1000000000
+
+
+glaum-s1000000000:
+    offshore_mods:
+        wake_model: glaum
+        region_area_threshold: 1000000000
+

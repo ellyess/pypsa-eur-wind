@@ -427,14 +427,14 @@ if __name__ == "__main__":
             
         if which == "regions_offshore":
             
-            # to cluster North Sea
-            sea_shape = gpd.read_file('data/north_sea_shape_updated.geojson')
-            clustered_regions = clustered_regions.clip(sea_shape).reset_index(drop=True)
+            # defining if to clip the offshore regions to a specific area
+            sea_shape = snakemake.config["offshore_mods"].get("sea_shape")
+            if sea_shape is not None:
+                clustered_regions = clustered_regions.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
             
             threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-            
-            # my_file = Path("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
-            wake_extras = "wake_extra/"+str(snakemake.config["run"].get("prefix"))+"/regions_offshore_s"+str(threshold)+".geojson"
+            # wake_extras = "wake_extra/"+str(snakemake.config["run"].get("prefix"))+"/regions_offshore_s"+str(threshold)+".geojson"
+            wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson"
             my_file = Path(wake_extras)
             
             if not my_file.is_file():

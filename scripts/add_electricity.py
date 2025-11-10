@@ -1026,11 +1026,11 @@ def add_wake_generators(method):
         threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
         # if threshold < 5000000:
         # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["run"].get("prefix"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
 
         
         
-        print(offshore_reg)
+        # print(offshore_reg)
         # split_type = str(snakemake.config["wake_effect"].get("split_region"))
         # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
         wake_generators['regions'] = mapping
@@ -1038,10 +1038,7 @@ def add_wake_generators(method):
                 offshore_reg[['area']], right_index=True, left_on="regions"
                 )
         
-        # wake_generators["factor_wake_1"] = (0.7 * 0 + 10.65)/100
-        # wake_generators["factor_wake_2"] = (0.7 * 1 + 10.65)/100 - wake_generators["factor_wake_1"]
-        # wake_generators["factor_wake_3"] = (0.7 * 2 + 10.65)/100 - (wake_generators["factor_wake_1"]+wake_generators["factor_wake_2"])
-        # wake_generators["factor_wake_4"] = (0.7 * 3 + 10.65)/100 - (wake_generators["factor_wake_1"]+wake_generators["factor_wake_2"]+wake_generators["factor_wake_3"])
+        
         wake_generators["factor_wake_1"] = (0.7 * 1 + 10.65)/100
         wake_generators["factor_wake_2"] = (0.7 * 3 + 10.65)/100
         wake_generators["factor_wake_3"] = (0.7 * 5 + 10.65)/100
@@ -1049,9 +1046,6 @@ def add_wake_generators(method):
         wake_generators["max_capacity_1"] = wake_generators["area"]
         wake_generators["max_capacity_2"] = wake_generators["area"]
         wake_generators["max_capacity_3"] = wake_generators["area"]
-        # wake_generators["max_capacity_1"] = 1*wake_generators["area"]
-        # wake_generators["max_capacity_2"] = 2*wake_generators["area"]
-        # wake_generators["max_capacity_3"] = 3*wake_generators["area"]
         wake_generators["max_capacity_4"] = np.inf
         
         #     offshore_reg["factor_wake_1"] = (0.7 * (0) + 10.65)/100
@@ -1064,6 +1058,91 @@ def add_wake_generators(method):
             2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
             3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
             4: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
+        }
+        
+    ### seperate
+    if method == 'newv2':
+        # loading region file to use the regional area
+        
+        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+        # if threshold < 5000000:
+        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+
+        
+        
+        # print(offshore_reg)
+        # split_type = str(snakemake.config["wake_effect"].get("split_region"))
+        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
+        wake_generators['regions'] = mapping
+        wake_generators = wake_generators.merge(
+                offshore_reg[['area']], right_index=True, left_on="regions"
+                )
+        
+        
+        alpha = 7.3
+        beta = 0.05
+        gamma = -0.7
+        delta = -14.6
+        wake_generators["factor_wake_1"] = -((alpha*np.exp(-1/beta) + gamma*1 + delta))/100
+        wake_generators["factor_wake_2"] = -((alpha*np.exp(-3/beta) + gamma*3 + delta))/100
+        wake_generators["factor_wake_3"] = -((alpha*np.exp(-5/beta) + gamma*3 + delta))/100
+        wake_generators["factor_wake_4"] = -((alpha*np.exp(-7/beta) + gamma*3 + delta))/100
+        wake_generators["max_capacity_1"] = wake_generators["area"]
+        wake_generators["max_capacity_2"] = wake_generators["area"]
+        wake_generators["max_capacity_3"] = wake_generators["area"]
+        wake_generators["max_capacity_4"] = np.inf
+        
+        
+        split_generators = {
+            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
+            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            4: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
+        }
+        
+    if method == 'new_more':
+        # loading region file to use the regional area
+        
+        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+
+        wake_generators['regions'] = mapping
+        wake_generators = wake_generators.merge(
+                offshore_reg[['area']], right_index=True, left_on="regions"
+                )
+        
+        def y(x):
+            alpha = 7.3
+            beta = 0.05
+            gamma = -0.7
+            delta = -14.6
+            return alpha*np.exp(-x/beta) + gamma*x + delta
+
+        def piecewise(x0,x1):
+            return (y(x1)*x1 - y(x0)*x0)/(x1-x0)
+
+        x0,x1,x2,x3,x4,x5,x6 = 0,0.025,0.05,0.25,1,2.5,4
+        wake_generators["factor_wake_1"] = -(piecewise(x0,x1))/100
+        wake_generators["factor_wake_2"] = -(piecewise(x1,x2))/100
+        wake_generators["factor_wake_3"] = -(piecewise(x2,x3))/100
+        wake_generators["factor_wake_4"] = -(piecewise(x3,x4))/100
+        wake_generators["factor_wake_5"] = -(piecewise(x4,x5))/100
+        wake_generators["factor_wake_6"] = -(piecewise(x5,x6))/100
+        wake_generators["max_capacity_1"] = wake_generators["area"] * x1
+        wake_generators["max_capacity_2"] = wake_generators["area"] * (x2-x1)
+        wake_generators["max_capacity_3"] = wake_generators["area"] * (x3-x2)
+        wake_generators["max_capacity_4"] = wake_generators["area"] * (x4-x3)
+        wake_generators["max_capacity_5"] = wake_generators["area"] * (x5-x4)
+        wake_generators["max_capacity_6"] = np.inf
+        
+        split_generators = {
+            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
+            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            4: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            5: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_5+wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
+            6: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_5+wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
         }
     
     #### Glaum
@@ -1152,8 +1231,8 @@ def drop_non_dominant_offwind_generators():
     total = generators.groupby('region')['p_nom_max'].transform('sum')
     generators['% of capacity'] = generators['p_nom_max'].div(total)
 
-    generators_to_keep = generators.sort_values('% of capacity').drop_duplicates(['region'], keep='last')
-    generators_to_keep = generators_to_keep[generators_to_keep.p_nom_max >= 12].index # removing anything lower than 12MW
+    generators_to_keep = generators.sort_values('% of capacity').drop_duplicates(['region'], keep='last').index
+    # generators_to_keep = generators_to_keep[generators_to_keep.p_nom_max >= 12].index # removing anything lower than 12MW
 
     generators_to_drop = generators.drop(index=generators_to_keep).index
     n.generators.drop(index=generators_to_drop, inplace=True)
@@ -1255,8 +1334,9 @@ if __name__ == "__main__":
     
     
     # attempt to drop
-    
-    drop_non_dominant_offwind_generators()
+    drop_gens = str(snakemake.config["offshore_mods"].get("mode"))
+    if drop_gens == "dominant":
+        drop_non_dominant_offwind_generators()
     
     
     if "hydro" in renewable_carriers:
