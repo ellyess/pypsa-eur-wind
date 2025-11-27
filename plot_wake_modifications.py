@@ -152,34 +152,29 @@ def clean_results(n, df, scenarios):
 
 def nice_names_for_plotting(scenario):
     if scenario.split('-')[0] == "base":
-        nice_name = "(a) None"
+        nice_name = "(a) "+r"$\mathrm{WC}: \alpha = 1.0"
     elif scenario.split('-')[0] == "standard":
-        nice_name = "(b) Single Tier"
-    elif scenario.split('-')[0] == "new_more":
-        nice_name = "(d) Variable Tiers"
+        nice_name = "(b) "+r"$\mathrm{WC}: \alpha = 0.8855"
     elif scenario.split('-')[0] == "glaum":
-        nice_name = "(f) Fixed Tiers"
+        nice_name = "(c) "+r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$'
+    elif scenario.split('-')[0] == "new_more":
+        nice_name = "(d) "+r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$'
 
     area = int(scenario.split('-')[1][1:])
     nice_name += " | " + f"{area:,}" + r" km$\mathrm{^{2}}$"
     return nice_name
   
   
-################################################################################
-################################# PLOTTING #####################################
-################################################################################
 def nice_names_for_plotting_label(models):
     labels = []
-    if "glaum" in models:
-        labels.append("Fixed Tiers |")
     if "new_more" in models:
-        labels.append("Variable Tiers |")
-    if "ellyess" in models:
-        labels.append("New |")
+        labels.append(r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$ |')
+    if "glaum" in models:
+        labels.append(r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$ |')
     if "standard" in models:
-        labels.append("Single Tier |")
+        labels.append(r"$\mathrm{WC}: \alpha = 0.8855$ |")
     if "base" in models:
-        labels.append("None |")
+        labels.append(r"$\mathrm{WC}: \alpha = 1.0$ |")
     return labels
 
 def plot_stacked(var,results, filter, colours, name):
@@ -226,7 +221,7 @@ def plot_stacked(var,results, filter, colours, name):
   handles, labels = plt.gca().get_legend_handles_labels()
   
   if 'singlewind' in name:
-      labels = ['Offshore Wind (All-Inclusive)']
+      labels = ['Offshore Wind (Combined)']
 
   plt.figlegend(handles,[word.title() for word in labels],loc = 'upper center', bbox_to_anchor=(0.5, 0), ncol=3, title='Carrier', frameon=False)
   # plt.xticks(rotation=90)

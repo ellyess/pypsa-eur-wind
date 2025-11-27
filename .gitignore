@@ -77,3 +77,5 @@ merger-todos.md
 *.html
 .DS_Store
 /plots
+.DS_Store
+.DS_Store

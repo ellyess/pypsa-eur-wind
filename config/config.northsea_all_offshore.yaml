@@ -20,7 +20,7 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-10-northsea-dominant"
+  prefix: "2030-10-northsea-dominant-6h"
   name:
   # - base-s100000
   # - base-s75000
@@ -30,7 +30,7 @@ run:
   # - base-s7500
   # - base-s5000
   # - base-s2500
-  # - base-s1000
+  - base-s1000
   # - standard-s100000
   # - standard-s75000
   # - standard-s50000
@@ -39,7 +39,7 @@ run:
   # - standard-s7500
   # - standard-s5000
   # - standard-s2500
-  # - standard-s1000
+  - standard-s1000
   # - new_more-s100000
   # - new_more-s75000
   # - new_more-s50000
@@ -48,15 +48,15 @@ run:
   # - new_more-s7500
   # - new_more-s5000
   # - new_more-s2500
-  # - new_more-s1000
-  - glaum-s100000
-  - glaum-s75000
-  - glaum-s50000
-  - glaum-s25000
-  - glaum-s10000
-  - glaum-s7500
-  - glaum-s5000
-  - glaum-s2500
+  - new_more-s1000
+  # - glaum-s100000
+  # - glaum-s75000
+  # - glaum-s50000
+  # - glaum-s25000
+  # - glaum-s10000
+  # - glaum-s7500
+  # - glaum-s5000
+  # - glaum-s2500
   - glaum-s1000
   scenarios:
     enable: true
@@ -908,7 +908,7 @@ clustering:
       ramp_limit_down: max
   temporal:
     resolution_elec: false
-    resolution_sector: 24h
+    resolution_sector: 6h
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#adjustments
 adjustments:
