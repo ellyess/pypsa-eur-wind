@@ -57,25 +57,15 @@ publications.jrc.ec.europa.eu/
 d1gam3xoknrgr2.cloudfront.net/
 
 *.org
-
 *.nc
-
 *~
-
 *.pyc
-
 *.xlsx
-
 *.xls
-
 *.geojson
-
 *.ipynb
 
 merger-todos.md
-
 *.html
-.DS_Store
 /plots
-.DS_Store
 .DS_Store
