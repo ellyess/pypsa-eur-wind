@@ -14,6 +14,178 @@
 #############################################################################
 ################################## SPLITTING ################################
 #############################################################################
+# base-s100000-cor:
+#     offshore_mods:
+#         wake_model: base
+#         region_area_threshold: 1000
+#     renewable:
+#         onwind:
+#             bias_corr: true
+#         offwind-ac:
+#             bias_corr: true
+#         offwind-dc:
+#             bias_corr: true
+#         offwind-float:
+#             bias_corr: true
+
+# base-s100000-uncor:
+#     offshore_mods:
+#         wake_model: base
+#         region_area_threshold: 1000
+
+base-s100000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: true
+        offwind-ac:
+            resource:
+                bias_corr: true
+        offwind-dc:
+            resource:
+                bias_corr: true
+        offwind-float:
+            resource:
+                bias_corr: true
+
+base-s100000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: false
+        offwind-ac:
+            resource:
+                bias_corr: false
+        offwind-dc:
+            resource:
+                bias_corr: false
+        offwind-float:
+            resource:
+                bias_corr: false
+
+base-s50000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 50000
+        onshore_threshold: 50000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: true
+        offwind-ac:
+            resource:
+                bias_corr: true
+        offwind-dc:
+            resource:
+                bias_corr: true
+        offwind-float:
+            resource:
+                bias_corr: true
+
+base-s50000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 50000
+        onshore_threshold: 50000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: false
+        offwind-ac:
+            resource:
+                bias_corr: false
+        offwind-dc:
+            resource:
+                bias_corr: false
+        offwind-float:
+            resource:
+                bias_corr: false
+
+base-s10000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: true
+        offwind-ac:
+            resource:
+                bias_corr: true
+        offwind-dc:
+            resource:
+                bias_corr: true
+        offwind-float:
+            resource:
+                bias_corr: true
+
+base-s10000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: false
+        offwind-ac:
+            resource:
+                bias_corr: false
+        offwind-dc:
+            resource:
+                bias_corr: false
+        offwind-float:
+            resource:
+                bias_corr: false
+
+base-s1000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: true
+        offwind-ac:
+            resource:
+                bias_corr: true
+        offwind-dc:
+            resource:
+                bias_corr: true
+        offwind-float:
+            resource:
+                bias_corr: true
+
+base-s1000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: false
+        offwind-ac:
+            resource:
+                bias_corr: false
+        offwind-dc:
+            resource:
+                bias_corr: false
+        offwind-float:
+            resource:
+                bias_corr: false
+
+
 
 base-s100000:
     offshore_mods:

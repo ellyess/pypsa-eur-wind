@@ -555,20 +555,36 @@ def attach_wind_and_solar(
             else:
                 capital_cost = costs.at[car, "capital_cost"]
 
-                n.add(
-                    "Generator",
-                    ds.indexes["bus"],
-                    " " + car,
-                    bus=ds.indexes["bus"],
-                    carrier=car,
-                    p_nom_extendable=car in extendable_carriers["Generator"],
-                    p_nom_max=ds["p_nom_max"].to_pandas(),
-                    marginal_cost=costs.at[supcar, "marginal_cost"],
-                    capital_cost=capital_cost,
-                    efficiency=costs.at[supcar, "efficiency"],
-                    p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
-                    lifetime=costs.at[supcar, "lifetime"],
-                )
+                if supcar == "onwind":
+                    n.add(
+                        "Generator",
+                        ds.indexes["bus"],
+                        " " + car,
+                        bus=ds.indexes["bus"].str.split("_").str[0],
+                        carrier=car,
+                        p_nom_extendable=car in extendable_carriers["Generator"],
+                        p_nom_max=ds["p_nom_max"].to_pandas(),
+                        marginal_cost=costs.at[supcar, "marginal_cost"],
+                        capital_cost=capital_cost,
+                        efficiency=costs.at[supcar, "efficiency"],
+                        p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
+                        lifetime=costs.at[supcar, "lifetime"],
+                    ) 
+                else:
+                    n.add(
+                        "Generator",
+                        ds.indexes["bus"],
+                        " " + car,
+                        bus=ds.indexes["bus"],
+                        carrier=car,
+                        p_nom_extendable=car in extendable_carriers["Generator"],
+                        p_nom_max=ds["p_nom_max"].to_pandas(),
+                        marginal_cost=costs.at[supcar, "marginal_cost"],
+                        capital_cost=capital_cost,
+                        efficiency=costs.at[supcar, "efficiency"],
+                        p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
+                        lifetime=costs.at[supcar, "lifetime"],
+                    )
                 
 
 def attach_conventional_generators(

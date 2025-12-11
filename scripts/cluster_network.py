@@ -14,9 +14,9 @@ Relevant Settings
 .. code:: yaml
 
     clustering:
-      cluster_network:
-      aggregation_strategies:
-      focus_weights:
+        cluster_network:
+        aggregation_strategies:
+        focus_weights:
 
     solving:
         solver:
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     for which in ["regions_onshore", "regions_offshore"]:
         regions = gpd.read_file(snakemake.input[which])
         clustered_regions = cluster_regions((clustering.busmap,), regions)
-            
+        
         if which == "regions_offshore":
             
             # defining if to clip the offshore regions to a specific area
@@ -432,7 +432,7 @@ if __name__ == "__main__":
             if sea_shape is not None:
                 clustered_regions = clustered_regions.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
             
-            threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
             # wake_extras = "wake_extra/"+str(snakemake.config["run"].get("prefix"))+"/regions_offshore_s"+str(threshold)+".geojson"
             wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson"
             my_file = Path(wake_extras)
@@ -440,7 +440,15 @@ if __name__ == "__main__":
             if not my_file.is_file():
                 meshed_regions = split_regions(clustered_regions,threshold)
                 meshed_regions.to_file(wake_extras)
-            
+        
+        else:
+            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+            wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson"
+            my_file = Path(wake_extras)
+            if not my_file.is_file():
+                meshed_regions = split_regions(clustered_regions,threshold)
+                meshed_regions.to_file(wake_extras)
+                
         clustered_regions.to_file(snakemake.output[which])
         # append_bus_shapes(nc, clustered_regions, type=which.split("_")[1])
         

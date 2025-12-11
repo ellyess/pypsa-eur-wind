@@ -9,13 +9,13 @@ Functions for use in conjunction with wind data generation.
 
 import logging
 import re
-
 import numpy as np
+import xarray as xr
 
 logger = logging.getLogger(__name__)
 
 
-def extrapolate_wind_speed(ds, to_height, from_height=None):
+def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
     """
     Extrapolate the wind speed from a given height above ground to another.
 
@@ -72,6 +72,22 @@ def extrapolate_wind_speed(ds, to_height, from_height=None):
     wnd_spd = ds[from_name] * (
         np.log(to_height / ds["roughness"]) / np.log(from_height / ds["roughness"])
     )
+    print("DOES THIS WORK PRIOR TO BIAS CORR???")
+    # Bias correction based on Ellyess et al. (10.1016/j.energy.2024.133759)
+    if bias_corr:
+        print("IS THIS WORKING??!?!?!?!? IF YOU SEE THIS THEN BIAS CORRECT TRUE")
+        # wnd_spd.to_netcdf('bias-extra/atlite_ws_uncorrected.nc')
+        bias_fac = xr.open_dataset('bias-extra/alite_bias.nc')
+        scalar = bias_fac.scalar.interp(
+                    method='nearest',
+                    x=wnd_spd.x.values, y=wnd_spd.y.values,
+                    kwargs={"fill_value": 1.0})
+        offset = bias_fac.offset.interp(
+                    method='nearest',
+                    x=wnd_spd.x.values, y=wnd_spd.y.values,
+                    kwargs={"fill_value": 0.0})
+        wnd_spd = (wnd_spd*scalar) + offset
+        # wnd_spd.to_netcdf('bias-extra/atlite_ws_corrected.nc')
 
     wnd_spd.attrs.update(
         {
@@ -81,5 +97,5 @@ def extrapolate_wind_speed(ds, to_height, from_height=None):
             "units": "m s**-1",
         }
     )
-
+    
     return wnd_spd.rename(to_name)

@@ -103,10 +103,17 @@ if __name__ == "__main__":
     technology = snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
-    threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
     clusters = snakemake.wildcards.clusters
     
+    if snakemake.wildcards.technology.startswith("onwind"):
+        threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+
+    else:
+        threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
+        
     wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/availability_matrix_{clusters}_{technology}_{threshold}.nc"
+    # my_file = Path(wake_extras)
+    # wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/availability_matrix_{clusters}_{technology}_{threshold}.nc"
     my_file = Path(wake_extras)
     # my_file = Path(f"ellyess_extra/availability_matrix_{clusters}_{technology}_{threshold}.nc")
     if my_file.is_file():
@@ -115,9 +122,12 @@ if __name__ == "__main__":
         cutout = atlite.Cutout(snakemake.input.cutout)
         
         if snakemake.wildcards.technology.startswith("offwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
             # regions = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
             regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson")
+        elif snakemake.wildcards.technology.startswith("onwind"):
+            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson")
         else:
             regions = gpd.read_file(snakemake.input.regions)
             

@@ -150,12 +150,21 @@ if __name__ == "__main__":
     resource = params["resource"]  # pv panel params / wind turbine params
     resource["show_progress"] = not noprogress
 
-    threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
     clusters = snakemake.wildcards.clusters
     
-    wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}.nc"
+    if "wind" in technology:
+        if snakemake.wildcards.technology.startswith("onwind"):
+            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+        elif snakemake.wildcards.technology.startswith("offwind"):
+            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
+        
+        bias_bool = str(snakemake.params.renewable[technology]["resource"].get("bias_corr"))
+        wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}_{bias_bool}.nc"
+    else:
+        threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+        wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}.geojson"
+    
     my_file = Path(wake_extras)
-    # my_file = Path(f"ellyess_extra/profile_{clusters}_{technology}_{threshold}.nc")
     if my_file.is_file():
         ds = xr.open_dataset(my_file)
         ds.to_netcdf(snakemake.output.profile)
@@ -184,10 +193,11 @@ if __name__ == "__main__":
         availability = xr.open_dataarray(snakemake.input.availability_matrix)
 
         if snakemake.wildcards.technology.startswith("offwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-            # regions = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
+            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
             regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson")
-
+        elif snakemake.wildcards.technology.startswith("onwind"):
+            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
+            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson")
         else:
             regions = gpd.read_file(snakemake.input.regions)
             
