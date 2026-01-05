@@ -1025,9 +1025,20 @@ def attach_stores(n, costs, extendable_carriers):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
-####
+#################################################################################
+############# ELLYESS BENMOUFOK - ADDING WAKE EFFECTS TO OFFSHORE WIND ##########
+#################################################################################
 def add_wake_generators(method):
-    # filtering only offwind and getting region number
+    """
+    Adding wake effect to offshore wind generators based on different methods.
+    
+    Args:
+    - n: The PyPSA network.
+    - method: The method to apply wake effects. Options are 'new_more' or 'glaum'.
+    Returns:
+    - None
+    """
+    # Filtering only offwind and getting region number
     mapping = (
             n.generators.filter(like="offwind", axis=0)
             .index.to_series()
@@ -1035,92 +1046,11 @@ def add_wake_generators(method):
         )
     wake_generators = n.generators.loc[mapping.index,:]
 
-    ### seperate
-    if method == 'ellyess':
-        # loading region file to use the regional area
-        
-        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-        # if threshold < 5000000:
-        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-
-        
-        
-        # print(offshore_reg)
-        # split_type = str(snakemake.config["wake_effect"].get("split_region"))
-        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
-        wake_generators['regions'] = mapping
-        wake_generators = wake_generators.merge(
-                offshore_reg[['area']], right_index=True, left_on="regions"
-                )
-        
-        
-        wake_generators["factor_wake_1"] = (0.7 * 1 + 10.65)/100
-        wake_generators["factor_wake_2"] = (0.7 * 3 + 10.65)/100
-        wake_generators["factor_wake_3"] = (0.7 * 5 + 10.65)/100
-        wake_generators["factor_wake_4"] = (0.7 * 7 + 10.65)/100
-        wake_generators["max_capacity_1"] = wake_generators["area"]
-        wake_generators["max_capacity_2"] = wake_generators["area"]
-        wake_generators["max_capacity_3"] = wake_generators["area"]
-        wake_generators["max_capacity_4"] = np.inf
-        
-        #     offshore_reg["factor_wake_1"] = (0.7 * (0) + 10.65)/100
-#     offshore_reg["factor_wake_2"] = (0.7 * (1) + 10.65)/100
-#     offshore_reg["factor_wake_3"] = (0.7 * (2) + 10.65)/100
-#     offshore_reg["factor_wake_4"] = (0.7 * (3) + 10.65)/100
-        
-        split_generators = {
-            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
-            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            4: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
-        
-    ### seperate
-    if method == 'newv2':
-        # loading region file to use the regional area
-        
-        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-        # if threshold < 5000000:
-        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
-
-        
-        
-        # print(offshore_reg)
-        # split_type = str(snakemake.config["wake_effect"].get("split_region"))
-        # offshore_reg = gpd.read_file("ellyess_extra/regions_offshore_s"+str(split_type)+".geojson").set_index("name")
-        wake_generators['regions'] = mapping
-        wake_generators = wake_generators.merge(
-                offshore_reg[['area']], right_index=True, left_on="regions"
-                )
-        
-        
-        alpha = 7.3
-        beta = 0.05
-        gamma = -0.7
-        delta = -14.6
-        wake_generators["factor_wake_1"] = -((alpha*np.exp(-1/beta) + gamma*1 + delta))/100
-        wake_generators["factor_wake_2"] = -((alpha*np.exp(-3/beta) + gamma*3 + delta))/100
-        wake_generators["factor_wake_3"] = -((alpha*np.exp(-5/beta) + gamma*3 + delta))/100
-        wake_generators["factor_wake_4"] = -((alpha*np.exp(-7/beta) + gamma*3 + delta))/100
-        wake_generators["max_capacity_1"] = wake_generators["area"]
-        wake_generators["max_capacity_2"] = wake_generators["area"]
-        wake_generators["max_capacity_3"] = wake_generators["area"]
-        wake_generators["max_capacity_4"] = np.inf
-        
-        
-        split_generators = {
-            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
-            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            4: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
-        
+    # New more complex method
     if method == 'new_more':
         # loading region file to use the regional area
         
-        threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
+        threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
         offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
 
         wake_generators['regions'] = mapping
@@ -1161,7 +1091,7 @@ def add_wake_generators(method):
             6: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_5+wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
         }
     
-    #### Glaum
+    # Glaum et al. 2020 method
     elif method == 'glaum':
         # n.generators.loc[mapping.index, "p_nom_max"] = n.generators.loc[mapping.index, "p_nom_max"] * 0.906
         n.generators_t.p_max_pu.loc[:,mapping.index] = n.generators_t.p_max_pu.loc[:,mapping.index]  * 0.906
@@ -1241,6 +1171,13 @@ def add_wake_generators(method):
     ########
 
 def drop_non_dominant_offwind_generators():
+    """
+    Drop non-dominant offshore wind generators in each region, keeping only the one with the highest capacity.
+    Args:
+    - n: The PyPSA network.
+    Returns:
+    - None
+    """
     generators = n.generators.filter(regex="offwind", axis=0).copy()
     generators['region'] = generators.index.to_series().str.replace(r" offwind-\w+", "", regex=True)
 
@@ -1253,7 +1190,8 @@ def drop_non_dominant_offwind_generators():
     generators_to_drop = generators.drop(index=generators_to_keep).index
     n.generators.drop(index=generators_to_drop, inplace=True)
     n.generators_t.p_max_pu.drop(columns=generators_to_drop, inplace=True)
-  
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1388,12 +1326,8 @@ if __name__ == "__main__":
             )
 
     update_p_nom_max(n)
-
-    # if snakemake.config["wake_effect"].get("type") == "glaum":
-    #     add_wake_generators_glaum()
-    # elif snakemake.config["wake_effect"].get("type") == "ellyess":
-    #     add_wake_generators_ellyess()
     
+    # adding wake effects based on selected method
     wake_model = str(snakemake.config["offshore_mods"].get("wake_model"))
     if wake_model != "base":
         if wake_model == "standard":

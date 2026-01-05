@@ -422,6 +422,10 @@ if __name__ == "__main__":
 
     # nc.shapes = n.shapes.copy()
     for which in ["regions_onshore", "regions_offshore"]:
+        
+    #################################################################################
+    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
+    #################################################################################
         regions = gpd.read_file(snakemake.input[which])
         clustered_regions = cluster_regions((clustering.busmap,), regions)
         
@@ -433,7 +437,6 @@ if __name__ == "__main__":
                 clustered_regions = clustered_regions.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
             
             threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-            # wake_extras = "wake_extra/"+str(snakemake.config["run"].get("prefix"))+"/regions_offshore_s"+str(threshold)+".geojson"
             wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson"
             my_file = Path(wake_extras)
             
