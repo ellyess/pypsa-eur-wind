@@ -21,19 +21,30 @@ remote:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 
 run:
-  prefix: "2030-10-northsea-standard-24h-pyvwf"
+  prefix: "2030-10-northsea-dominant-24h-pyvwf"
   name:
-  - base-s100000-uncor
   - base-s100000-cor
-  - base-s10000-uncor
   - base-s10000-cor
-  - base-s1000-uncor
   - base-s1000-cor
-  # - base-s50000-uncor
-  # - base-s50000-cor
+  - glaum-s100000-cor
+  - glaum-s10000-cor
+  - glaum-s1000-cor
+  - new_more-s100000-cor
+  - new_more-s10000-cor
+  - new_more-s1000-cor
+  - base-s100000-uncor
+  - base-s10000-uncor
+  - base-s1000-uncor
+  - glaum-s100000-uncor
+  - glaum-s10000-uncor
+  - glaum-s1000-uncor
+  - new_more-s100000-uncor
+  - new_more-s10000-uncor
+  - new_more-s1000-uncor
+
   scenarios:
     enable: true
-    file: config/scenarios-june.yaml
+    file: config/scenarios-bias.yaml
   disable_progressbar: false
   shared_resources:
     policy: base

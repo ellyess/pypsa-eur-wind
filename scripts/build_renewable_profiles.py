@@ -152,6 +152,9 @@ if __name__ == "__main__":
 
     clusters = snakemake.wildcards.clusters
     
+    #################################################################################
+    ############# ELLYESS BENMOUFOK - CHECKING FOR EXISTING WAKE EFFECT FILE ########
+    #################################################################################
     if "wind" in technology:
         if snakemake.wildcards.technology.startswith("onwind"):
             threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
@@ -164,6 +167,7 @@ if __name__ == "__main__":
         threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
         wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}.geojson"
     
+    # Check if file already exists
     my_file = Path(wake_extras)
     if my_file.is_file():
         ds = xr.open_dataset(my_file)
@@ -192,6 +196,7 @@ if __name__ == "__main__":
 
         availability = xr.open_dataarray(snakemake.input.availability_matrix)
 
+        # Load split regions file for wind technologies
         if snakemake.wildcards.technology.startswith("offwind"):
             threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
             regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson")
@@ -206,7 +211,6 @@ if __name__ == "__main__":
             "disable the corresponding renewable technology"
         )
         
-            
         # do not pull up, set_index does not work if geo dataframe is empty
         regions = regions.set_index("name").rename_axis("bus")
         if snakemake.wildcards.technology.startswith("offwind"):

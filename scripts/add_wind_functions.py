@@ -8,13 +8,6 @@ from sklearn.cluster import KMeans
 
 from shapely.geometry import box, Polygon, MultiPolygon, GeometryCollection, Point
 
-# def calculate_area(shape, ellipsoid="WGS84"):
-#     """
-#     Calculates area in km².
-#     """
-#     geod = Geod(ellps=ellipsoid)
-#     return abs(geod.geometry_area_perimeter(shape)[0]) / 1e6
-
 def cluster_points(n_clusters, point_list):
     """
     Clusters the inner points of a region into n_clusters.
@@ -114,6 +107,7 @@ def voronoi_partition_pts(points, outline):
 
 
 def mesh_region(region, threshold):
+    """Split a regional polygon into multiple parts across it's shortest dimension"""
     geometry = region.geometry
     area = region["area"]
     if area < threshold:
@@ -126,7 +120,21 @@ def mesh_region(region, threshold):
         return inner_regions
 
 def split_regions(regions,threshold):
-    """Split all regional polygons into multiple parts across it's shortest dimension"""
+    """
+    Split all regional polygons into multiple parts across it's shortest dimension
+    Parameters
+    
+    Arguments:
+    - regions: GeoDataFrame
+        A GeoDataFrame containing the regions to be split.
+    - threshold: float
+        The maximum area of each split region in square kilometers. Regions larger than this
+        will be split into smaller regions.
+    Returns:
+    - regions_split: GeoDataFrame
+        A GeoDataFrame containing the split regions with columns:
+        'name', 'bus_main', 'country', 'geometry', 'area'.
+    """
     regions["area"] = regions.to_crs({'proj':'cea'}).area / 10**6
     splits = []
     for i, region in regions.iterrows():
@@ -146,59 +154,3 @@ def split_regions(regions,threshold):
     regions_split['country'] = regions_split['bus_main'].str[:2]
     regions_split["area"] = regions_split.to_crs({'proj':'cea'}).area / 10**6
     return regions_split[['name','bus_main','country','geometry','area']]
-
-
-# def split_regions(regions,threshold,max_area):
-#     """Split all regional polygons into multiple parts across it's shortest dimension"""
-    
-#     if threshold >= max_area:
-#         max_area = threshold
-
-#     splits = []
-#     for i, region in regions.iterrows():
-#         inner_regions = gpd.GeoDataFrame({
-#                 'bus_main':region.iloc[0],
-#                 'geometry':gpd.GeoSeries(
-#                     mesh_region(region.geometry, max_area),
-#                     crs=4326
-#                     ),
-#             })
-#         splits.append(inner_regions)
-        
-#     regions_split = gpd.pd.concat(splits,ignore_index=True)
-#     regions_split["region_main"] = regions_split.groupby("bus_main").cumcount().astype(str) #+ regions_split.index.astype(str)
-#     regions_split["region"] = regions_split["region_main"].str.zfill(5)
-    
-#     splits = []
-#     if (threshold < max_area):
-#         sea_shape = gpd.read_file('data/north_sea_shape_updated.geojson')
-#         splits = []
-#         for i, region in regions_split.iterrows():
-#             if region.geometry.intersects(sea_shape.geometry.union_all()):
-#                 inner_regions = gpd.GeoDataFrame({
-#                     'bus_main':region.bus_main,
-#                     'region_main':region.region_main,
-#                     'geometry':gpd.GeoSeries(
-#                         mesh_region(region.geometry, threshold),
-#                         crs=4326
-#                         ),
-#                 })
-#             else:
-#                 inner_regions = gpd.GeoDataFrame({
-#                     'bus_main':region.bus_main,
-#                     'region_main':region.region_main,
-#                     'geometry':gpd.GeoSeries(
-#                         [region.geometry],
-#                         crs=4326
-#                         ),
-#                 })
-#             splits.append(inner_regions)
-            
-#         regions_split = gpd.pd.concat(splits,ignore_index=True)
-#         regions_split["region"] = (regions_split["region_main"] + regions_split.groupby(["bus_main","region_main"]).cumcount().astype(str)).str.zfill(5)
-        
-#     regions_split["name"] = regions_split["bus_main"].astype(str) +  "_" + regions_split["region"]
-#     regions_split['country'] = regions_split['bus_main'].str[:2]
-#     regions_split["region_main"] = regions_split["bus_main"].astype(str) +  "_" + regions_split["region_main"].str.zfill(5)
-
-#     return regions_split[['name','region_main','bus_main','country','geometry']]

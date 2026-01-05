@@ -1,0 +1,359 @@
+base-s100000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s10000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s1000-uncor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+glaum-s100000-uncor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+glaum-s10000-uncor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+glaum-s1000-uncor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+new_more-s100000-uncor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+new_more-s10000-uncor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+new_more-s1000-uncor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-near:
+            resource:
+                bias_corr: False
+        offwind-far:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+#############################################################################
+
+base-s100000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+base-s10000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+base-s1000-cor:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+glaum-s100000-cor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+glaum-s10000-cor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+glaum-s1000-cor:
+    offshore_mods:
+        wake_model: glaum
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s100000-cor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s10000-cor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s1000-cor:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-near:
+            resource:
+                bias_corr: True
+        offwind-far:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
