@@ -97,3 +97,4 @@ paper
 .idea/
 examples/Helsinki-Vantaa_2012.ipynb
 .DS_Store
+/results-working
