@@ -155,6 +155,8 @@ if __name__ == "__main__":
         if params["natura"]:
             excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
 
+        # added allow overlap true to prevent errors in case no overlap between
+        # excluder and cutout regions
         for dataset in ["corine", "luisa"]:
             kwargs = {"nodata": 0} if dataset == "luisa" else {}
             settings = params.get(dataset, {})
@@ -170,13 +172,13 @@ if __name__ == "__main__":
             if "grid_codes" in settings:
                 codes = settings["grid_codes"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, invert=True, crs=3035, **kwargs
+                    snakemake.input[dataset], codes=codes, invert=True, crs=3035, allow_no_overlap=True,**kwargs
                 )
             if settings.get("distance", 0.0) > 0.0:
                 codes = settings["distance_grid_codes"]
                 buffer = settings["distance"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, **kwargs
+                    snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, allow_no_overlap=True, **kwargs
                 )
 
         if params.get("ship_threshold"):

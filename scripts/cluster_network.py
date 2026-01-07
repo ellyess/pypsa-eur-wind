@@ -437,25 +437,39 @@ if __name__ == "__main__":
         regions = gpd.read_file(snakemake.input[which])
         clustered = cluster_regions((clustering.busmap,), regions)
 
-        # Clip clustered offshore regions (and make this the rule output)
+        # Ensure CRS is defined before any reprojection
+        if clustered.crs is None:
+            clustered = clustered.set_crs(4326, allow_override=True)
+
         tech = "offwind" if which == "regions_offshore" else "onwind"
+        threshold = get_threshold(mods, tech)  # Optional[int]
+
+        # Clip offshore clustered regions if configured
         if which == "regions_offshore":
             sea_shape = mods.get("sea_shape")
             if sea_shape:
                 clustered = clustered.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
 
-        # Write clustered regions to the declared Snakemake outputs
+        # Always write clustered regions to the rule outputs (clipped if offshore)
         clustered.to_file(snakemake.output[which], driver="GeoJSON")
 
-        # Cache split regions used downstream
-        threshold = get_threshold(mods, tech)
+        # Always write a cached regions file (split OR nosplit)
         out_path = regions_file(wdir, tech, threshold)
         if out_path is None:
             raise ValueError(f"regions_file() returned None for tech={tech!r}")
 
         if not out_path.is_file():
-            meshed = split_regions(clustered.to_crs(4326), threshold_km2=threshold)
-            meshed.to_file(out_path, driver="GeoJSON")
+            clustered_4326 = clustered.to_crs(4326)
+
+            if threshold is None:
+                # nosplit cache = clustered geometry
+                clustered_4326.to_file(out_path, driver="GeoJSON")
+            else:
+                # split cache
+                meshed = split_regions(clustered_4326, threshold_km2=threshold)
+                meshed.to_file(out_path, driver="GeoJSON")
+
+
 
     #################################################################################
     #################################################################################   

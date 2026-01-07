@@ -20,44 +20,36 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "2030-10-northsea-combined-6h"
+  prefix: "manuscriptwake-2030-10-northsea-combined-6h"
   name:
-  - base-s100000
-  - base-s75000
-  - base-s50000
-  - base-s25000
-  - base-s10000
-  - base-s7500
-  - base-s5000
-  - base-s2500
-  - base-s1000
-  - standard-s100000
-  - standard-s75000
-  - standard-s50000
-  - standard-s25000
-  - standard-s10000
-  - standard-s7500
-  - standard-s5000
-  - standard-s2500
-  - standard-s1000
-  - new_more-s100000
-  - new_more-s75000
-  - new_more-s50000
-  - new_more-s25000
-  - new_more-s10000
-  - new_more-s7500
-  - new_more-s5000
-  - new_more-s2500
-  - new_more-s1000
-  - glaum-s100000
-  - glaum-s75000
-  - glaum-s50000
-  - glaum-s25000
-  - glaum-s10000
-  - glaum-s7500
-  - glaum-s5000
-  - glaum-s2500
-  - glaum-s1000
+  - base-s100000-biasFalse
+  - base-s75000-biasFalse
+  - base-s50000-biasFalse
+  - base-s10000-biasFalse
+  - base-s7500-biasFalse
+  - base-s5000-biasFalse
+  - base-s1000-biasFalse
+  - standard-s100000-biasFalse
+  - standard-s75000-biasFalse
+  - standard-s50000-biasFalse
+  - standard-s10000-biasFalse
+  - standard-s7500-biasFalse
+  - standard-s5000-biasFalse
+  - standard-s1000-biasFalse
+  - glaum-s100000-biasFalse
+  - glaum-s75000-biasFalse
+  - glaum-s50000-biasFalse
+  - glaum-s10000-biasFalse
+  - glaum-s7500-biasFalse
+  - glaum-s5000-biasFalse
+  - glaum-s1000-biasFalse
+  - new_more-s100000-biasFalse
+  - new_more-s75000-biasFalse
+  - new_more-s50000-biasFalse
+  - new_more-s10000-biasFalse
+  - new_more-s7500-biasFalse
+  - new_more-s5000-biasFalse
+  - new_more-s1000-biasFalse
 
   scenarios:
     enable: true
@@ -113,14 +105,13 @@ co2_budget:
   2045: 0.032
   2050: 0.000
 
-########### MY ADDDITION
 offshore_mods:
   wake_model: base # base, standard, ellyess, glaum
   mode: single
   sea_shape: data/north_sea_shape_updated.geojson
-  shared_files: northsea
-  region_area_threshold: 100000 # area of regions
-  max_area: 100000 # max area of all regions
+  shared_files: bias
+  offshore_threshold: 100000 # area of regions
+  onshore_threshold: False # max area of all regions
   
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
 electricity:

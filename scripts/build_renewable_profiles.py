@@ -155,8 +155,6 @@ if __name__ == "__main__":
     resource = params["resource"]  # pv panel params / wind turbine params
     resource["show_progress"] = not noprogress
 
-
-    
     #################################################################################
     ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
     #################################################################################
