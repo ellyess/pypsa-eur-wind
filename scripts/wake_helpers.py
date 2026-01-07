@@ -43,18 +43,38 @@ def _wind_threshold_key(technology: str) -> Optional[str]:
     return None
 
 
-def get_threshold(mods: dict, technology: str) -> int:
-    """Return the configured area threshold (km²) for wind technologies."""
+def get_threshold(mods: dict, technology: str) -> Optional[int]:
+    """Return the configured area threshold (km²) for wind technologies.
+
+    If the corresponding threshold is set to False/None/0 in the config,
+    splitting is disabled and this returns None.
+
+    Returns:
+        Threshold in km² as int, or None if splitting is disabled for this tech.
+    """
     key = _wind_threshold_key(technology)
     if key is None:
         raise ValueError(
             "get_threshold() is only defined for wind technologies. "
             f"Got technology={technology!r}."
         )
+
     val = mods.get(key)
-    if val is None:
-        raise ValueError(f"Missing config offshore_mods.{key}")
-    return int(val)
+    # Explicit opt-out
+    if val is False or val is None:
+        return None
+
+    # Allow 0 as "disabled" too (optional)
+    try:
+        ival = int(val)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid config offshore_mods.{key}={val!r}") from e
+
+    if ival <= 0:
+        return None
+
+    return ival
+
 
 
 # -----------------------------------------------------------------------------
@@ -69,31 +89,62 @@ def get_wake_dir(mods: dict) -> Path:
     return d
 
 
+def regions_file(
+    wake_dir: Path,
+    technology: str,
+    threshold: Optional[int],
+) -> Optional[Path]:
+    """Return the cached regions path for wind technologies.
 
-def regions_file(wake_dir: Path, technology: str, threshold: int) -> Optional[Path]:
-    """Return the split-regions file path for wind technologies."""
+    If threshold is None, returns a 'nosplit' cache file.
+    """
     if technology.startswith("offwind"):
-        return wake_dir / f"regions_offshore_s{threshold}.geojson"
+        tag = f"s{threshold}" if threshold is not None else "nosplit"
+        return wake_dir / f"regions_offshore_{tag}.geojson"
+
     if technology.startswith("onwind"):
-        return wake_dir / f"regions_onshore_s{threshold}.geojson"
+        tag = f"s{threshold}" if threshold is not None else "nosplit"
+        return wake_dir / f"regions_onshore_{tag}.geojson"
+
     return None
 
 
-def availability_cache_path(wake_dir: Path, clusters, technology: str, threshold: int) -> Path:
-    """Return cache path for availability matrices."""
-    return wake_dir / f"availability_matrix_{clusters}_{technology}_{threshold}.nc"
+
+def _threshold_token(threshold: Optional[int]) -> str:
+    """Return a stable filename token for split / no-split cases."""
+    return "nosplit" if threshold is None else str(int(threshold))
+
+
+def availability_cache_path(
+    wake_dir: Path,
+    clusters,
+    technology: str,
+    threshold: Optional[int],
+) -> Path:
+    """Return cache path for availability matrices.
+
+    Naming:
+        availability_matrix_<clusters>_<technology>_<threshold|nosplit>.nc
+    """
+    thr = _threshold_token(threshold)
+    return wake_dir / f"availability_matrix_{clusters}_{technology}_{thr}.nc"
 
 
 def profile_cache_path(
     wake_dir: Path,
     clusters,
     technology: str,
-    threshold: int,
+    threshold: Optional[int],
     bias: Optional[str] = None,
 ) -> Path:
-    """Return cache path for renewable profiles."""
+    """Return cache path for renewable profiles.
+
+    Naming:
+        profile_<clusters>_<technology>_<threshold|nosplit>[_bias<bias>].nc
+    """
+    thr = _threshold_token(threshold)
     suffix = f"_bias{bias}" if bias is not None else ""
-    return wake_dir / f"profile_{clusters}_{technology}_{threshold}{suffix}.nc"
+    return wake_dir / f"profile_{clusters}_{technology}_{thr}{suffix}.nc"
 
 
 # -----------------------------------------------------------------------------
@@ -102,22 +153,21 @@ def profile_cache_path(
 
 def load_regions(
     technology: str,
-    threshold: int,
+    threshold: Optional[int],
     wake_dir: Path,
     fallback_path: PathLike,
 ) -> gpd.GeoDataFrame:
-    """Load split regions for wind technologies; otherwise load a fallback file."""
+    """Load cached wind regions (split or nosplit); otherwise load fallback."""
     p = regions_file(wake_dir, technology, threshold)
     if p is None:
         return gpd.read_file(fallback_path)
 
-    if not p.is_file():
-        raise FileNotFoundError(
-            f"Expected split regions file not found: {p}. "
-            "Make sure the splitting rule has run."
-        )
+    if p.is_file():
+        return gpd.read_file(p)
 
-    return gpd.read_file(p)
+    # If cache doesn't exist yet, fall back (or raise if you want strict behavior)
+    return gpd.read_file(fallback_path)
+
 
 
 # -----------------------------------------------------------------------------
@@ -523,8 +573,6 @@ def split_regions(
         raise ValueError("`threshold_km2` must be positive.")
     if regions.geometry is None:
         raise ValueError("`regions` must have a geometry column.")
-    if bus_main_col not in regions.columns:
-        raise ValueError(f"`regions` must contain '{bus_main_col}' column.")
 
     reg = regions.copy().to_crs(out_crs)
     reg["_area_km2"] = reg.to_crs(area_crs).area / 1e6
@@ -535,7 +583,7 @@ def split_regions(
         if geom is None or geom.is_empty:
             continue
 
-        bus_main = row[bus_main_col]
+        bus_main = row.iloc[0]
         area_km2 = float(row["_area_km2"])
 
         sub_geoms = mesh_region(geom, area_km2, threshold_km2, random_state=random_state)

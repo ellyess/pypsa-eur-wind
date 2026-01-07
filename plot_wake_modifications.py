@@ -1,865 +1,935 @@
-import numpy as np
-import random
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import pypsa
-import shapely
-import warnings
-import xarray as xr
+# plot_wake_modifications.py
+from __future__ import annotations
+
 import itertools
-import geopandas as gpd
+import re
+import warnings
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Optional, Sequence, Tuple, Union
 
-from geopandas import GeoDataFrame
-from pypsa.plot import add_legend_patches
-from shapely.errors import ShapelyDeprecationWarning
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
+import pandas as pd
 
-warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
-warnings.simplefilter(action='ignore', category=FutureWarning)
+# Optional dependencies used by some functions
+import matplotlib.pyplot as plt
 
-pd.set_option('display.max_columns', None)
-cm = 1/2.54
-bg_colour = '#f0f0f0'
-custom_params = {'xtick.bottom': True, 'axes.edgecolor': 'black', 'axes.spines.right': False, 'axes.spines.top': False, 'mathtext.default': 'regular'}
-sns.set_theme(style='ticks', rc=custom_params)
-plt.rcParams["font.family"] = "serif"
-plt.rcParams["mathtext.fontset"] = "dejavuserif"
-plt.rcParams["mathtext.default"] = "it"
-plt.rcParams['axes.labelsize'] = 9
-plt.rcParams['axes.titlesize'] = 9
-plt.rcParams['legend.fontsize'] = 9
-plt.rcParams['legend.title_fontsize']=9
-plt.rc('xtick', labelsize=9) 
-plt.rc('ytick', labelsize=9) 
+try:
+    import seaborn as sns  # noqa: F401
+except Exception:  # pragma: no cover
+    sns = None  # type: ignore
 
-################################################################################
-################################# PLOTTING #####################################
-################################################################################
+try:
+    import geopandas as gpd  # noqa: F401
+except Exception:  # pragma: no cover
+    gpd = None  # type: ignore
 
-# PLOTTING FUNCTIONS
-def plot_stacked(var,results, filter, colours, name):
-    fig, ax = plt.subplots(figsize=(5, 7))
-    
-    if var ==  "Optimal Capacity":
-        save = "p_opt"
-        unit = " [GW]"
-    elif var ==  "Energy Balance":
-        save = "e_opt"
-        unit = " [TWh]"
-    elif var == "Capacity Factor":
-        save = "cf_opt"
-        unit = ""
-        
-    label = f"{var}{unit}"
-    results[var].filter(regex=filter, axis=1).plot(kind='barh', stacked=True,legend=False, color=colours.values, ylabel="",xlabel=label,ax=ax)
-    
-    labels_y = list(results['region_max'].map('{:,.0f}'.format)) # add comma to number
-    ax.set_yticklabels(labels_y)
-    
-    splits = results["region_max"].unique()
-    models = results["wake_model"].unique()
-    
-    class_lines_y = np.arange(-0.5,len(models)*len(splits),len(splits))
-    # print(class_lines_y)
-    class_labels_y = np.arange(np.floor(len(splits)/2),len(models)*len(splits),len(splits))
-    
-    # labels classes:
-    sec = ax.secondary_yaxis(location=0)
-    sec.set_yticks(class_labels_y, labels=nice_names_for_plotting_label(models))
-    sec.tick_params('y', length=60, width=0)
-    sec.set_ylabel(r'Wake Model | Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]')
-    
-    # lines between the classes:
-    sec2 = ax.secondary_yaxis(location=0)
-    sec2.set_yticks(class_lines_y, labels=[])
-    sec2.tick_params('y', length=120, width=1.5)
-    
-    x_max = results[var].filter(regex=filter, axis=1).mean(axis=0).sum()
-    ax.hlines(y=class_lines_y[:-2]+len(splits), xmin=0, xmax=x_max, linewidth=1.5, color='r',linestyles='--')
-    handles, labels = plt.gca().get_legend_handles_labels()
-    
-    if 'singlewind' in name:
-        labels = ['Offshore Wind (Combined)']
+try:
+    import pypsa  # noqa: F401
+except Exception as e:  # pragma: no cover
+    raise ImportError("This module requires pypsa to be installed.") from e
 
-    plt.figlegend(handles,[word.title() for word in labels],loc = 'upper center', bbox_to_anchor=(0.5, 0), ncol=3, title='Carrier', frameon=False)
-    plt.savefig('plots/'+name+'_'+save+'_stacked.png', bbox_inches='tight')
+try:
+    from shapely.errors import ShapelyDeprecationWarning  # noqa: F401
+except Exception:  # pragma: no cover
+    ShapelyDeprecationWarning = Warning  # type: ignore
 
-def plot_stacked_multi(clusters,models,splits,var,filter, prefix_list):
-    i=0
-    fig, ax = plt.subplots(1,3,figsize=(16.4*cm, 18*cm),dpi=600,sharey=True,sharex=True)
-    for prefix in prefix_list:
-        results, colours = results_dataframe(clusters,models,splits,prefix)
-        
-        if "combined" in prefix:
-            legend_labels = ['Combined']
-        else:
-            legend_labels = ['AC', 'DC','Floating']
 
-        if var ==  "Optimal Capacity":
-            save = "p_opt"
-            unit = " [GW]"
-        elif var ==  "Energy Balance":
-            save = "e_opt"
-            unit = " [TWh]"
-        elif var == "Capacity Factor":
-            save = "cf_opt"
-            unit = ""
-            
-        label = f"{var}{unit}"
-        results[var].filter(regex=filter, axis=1).plot(
-            kind='barh', stacked=True,legend=True, color=colours.values, 
-            ylabel="",xlabel=label,
-            ax=ax[i]
-            )
-        ax[i].legend(loc = 'upper center', bbox_to_anchor=(0.5, -0.06), ncol=1, title='Carrier', labels=legend_labels, frameon=False)
-        
+# -----------------------------------------------------------------------------
+# Plot styling (optional; call from notebook/script)
+# -----------------------------------------------------------------------------
 
-        labels_y = list(results['region_max'].map('{:,.0f}'.format)) # add comma to number
-        ax[i].set_yticklabels(labels_y)
+def setup_plot_style() -> None:
+    """Set consistent matplotlib/seaborn style for thesis figures."""
+    warnings.simplefilter(action="ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 
-        splits_u = results["region_max"].unique()
-        models_u = results["wake_model"].unique()
-
-        class_lines_y = np.arange(-0.5,len(splits_u)*len(splits_u),len(splits_u))
-        class_labels_y = np.arange(np.floor(len(splits_u)/2),len(models_u)*len(splits_u),len(splits_u))+2.5
-
-        if i == 0:
-            # labels classes:
-            sec = ax[i].secondary_yaxis(location=0)
-            sec.set_yticks(class_labels_y, labels=nice_names_for_plotting_label(models_u))
-            sec.tick_params('y', length=0, width=0,labelrotation=90,pad=50)
-            sec.set_ylabel(r'Wake Model | Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]')
-        
-            # lines between the classes:
-            sec2 = ax[i].secondary_yaxis(location=0)
-            sec2.set_yticks(class_lines_y, labels=[])
-            sec2.tick_params('y', length=50, width=1.5)
-        
-        x_max = results[var].filter(regex=filter, axis=1).mean(axis=0).sum()
-        
-    ax[i].hlines(y=class_lines_y[:3]+len(splits), xmin=0, xmax=x_max, linewidth=1.5*cm, color='r',linestyles='--')
-    i+=1
-    
-    fig.savefig('plots/'+'2030-10-northsea_all'+'_'+save+'_stacked.png', bbox_inches='tight')
-    fig.savefig(
-        'plots/'+'2030-10-northsea_standard'+'_'+save+'_stacked.png',
-        # we need a bounding box in inches
-        bbox_inches=mtransforms.Bbox(
-            # This is in "figure fraction" for the bottom half
-            # input in [[xmin, ymin], [xmax, ymax]]
-            [[0, 0], [0.43, 1]]
-        ).transformed(
-            (fig.transFigure - fig.dpi_scale_trans)
-        ),
-    )
-    fig.savefig(
-        'plots/'+'2030-10-northsea_dominant'+'_'+save+'_stacked.png',
-        bbox_inches=mtransforms.Bbox([[0.415, 0], [0.71, 1]]).transformed(
-            fig.transFigure - fig.dpi_scale_trans
-        ),
-    )
-    fig.savefig(
-        'plots/'+'2030-10-northsea_combined'+'_'+save+'_stacked.png',
-        bbox_inches=mtransforms.Bbox([[0.71, 0], [1, 1]]).transformed(
-            fig.transFigure - fig.dpi_scale_trans
-        ),
-    )
-
-def plot_capacities_split(results,filter,name,var):
-    carriers = results[var].filter(regex=filter, axis=1).columns.values
-    fig, axes = plt.subplots(1, len(carriers), figsize=(4.3*len(carriers), 4))
-    for carrier, i in zip(carriers, range(len(carriers))):
-    
-        if i == range(len(carriers))[-1]:
-            sns.lineplot(
-                x='region_max',
-                y= results[var][carrier],
-                hue ="wake_model",
-                style="wake_model",
-                hue_order = ['base', 'standard', 'ellyess', 'glaum'],
-                style_order= ['base', 'standard', 'ellyess', 'glaum'],
-                data = results,
-                ax = axes[i],
-                legend = True
-            )
-        
-        else:
-            sns.lineplot(
-                x='region_max',
-                y= results[var][carrier],
-                hue ="wake_model",
-                style="wake_model",
-                hue_order = ['base', 'standard', 'ellyess', 'glaum'],
-                style_order= ['base', 'standard', 'ellyess', 'glaum'],
-                data = results,
-                ax = axes[i],
-                legend = False
-            )
-        
-        axes[i].set_xlabel(r'Maximum Region Size (km$\mathrm{^{2}}$)')
-        axes[i].set_ylabel('Optimal Capacity (GW)')
-        axes[i].set_title(carrier)
-        axes[i].set_xlim(axes[i].get_xlim()[::-1])
-
-    axes[range(len(carriers))[-1]].get_legend().remove()
-    handles, labels = plt.gca().get_legend_handles_labels()
-    labels = ['Base', 'Standard',  'New', 'Glaum et al.']
-    plt.figlegend(handles, labels, loc = 'center right', bbox_to_anchor=(1.1, 0.5), ncol=1, title='Wake Model', frameon=False)
-    plt.tight_layout()
-    # plt.savefig('plots/'+name+'_capacity_split.png', bbox_inches='tight')
-    
-def plot_generation_series(clusters, models,splits, prefix):
-    """Plot generation output series 
-
-    Args:
-        clusters (_type_): _description_
-        models (_type_): _description_
-        splits (_type_): _description_
-        prefix (_type_): _description_
-    """
-    scenarios = scenario_list(models,splits)
-    for scenario in scenarios:
-        n = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-        color = n.carriers.set_index("nice_name").color.where(
-        lambda s: s != "", "lightgrey"
-        )
-        color = color[n.statistics.supply(comps=["Generator"], aggregate_time=False).droplevel(0).div(1e3).T.columns.get_level_values("carrier")]
-        
-        fig, ax = plt.subplots(figsize=(13, 4))
-        
-        n.statistics.supply(comps=["Generator"], aggregate_time=False).droplevel(0).div(1e3).T.plot.area(
-            title="Generation in GW",
-            ax=ax,
-            legend=False,
-            linewidth=0,
-            color=color
-        )
-        ax.legend(bbox_to_anchor=(1, 0), loc="lower left", title=None, ncol=1)
-        
-def plot_regional_carrier_percentage(prefix,scenario_list):
-    fig, ax = plt.subplots(1,3,figsize=(16.4*cm, 5*cm),dpi=600,sharex=True, sharey=True,layout='constrained')
-    i = 0
-    for scenario in scenario_list:
-        generators = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_10_lvopt___2030.nc").generators.filter(regex="offwind", axis=0).copy()
-        generators["region"] = generators.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        regions = gpd.read_file("wake_extra/northsea/regions_offshore_"+scenario.split('-')[1]+".geojson").set_index('name')
-        generators = generators.merge(regions, right_index=True, left_on="region")
-        # generators = generators[generators['p_nom_max']>=100]
-        
-        total = generators.groupby('region')['p_nom_opt'].transform('sum')
-        generators['% of capacity'] = generators['p_nom_opt'].div(total)
-        generators['% of capacity'] = generators['% of capacity'] * 100
-        generators = generators.sort_values('% of capacity').drop_duplicates(['region'], keep='last')
-        geo_df = df_to_geodf(generators, geom_col="geometry", crs="4326")
-        
-        carriers = {
-            'offwind-ac': 'Reds',
-            'offwind-dc': 'Blues',
-            'offwind-float': 'Greens'
+    # Avoid global seaborn dependency if not installed
+    if sns is not None:
+        custom_params = {
+            "xtick.bottom": True,
+            "axes.edgecolor": "black",
+            "axes.spines.right": False,
+            "axes.spines.top": False,
+            "mathtext.default": "regular",
         }
+        sns.set_theme(style="ticks", rc=custom_params)
 
-        j=0
-        for carrier, color in carriers.items():
-            if carrier == 'offwind-ac':
-                carrier_nice = 'AC'
-            elif carrier == 'offwind-dc':
-                carrier_nice = 'DC'
-            elif carrier == 'offwind-float':
-                carrier_nice = 'Floating'
-
-            if j == 0 and i == 2:
-                legend_value = True
-            elif j == 1 and i == 2:
-                legend_value = True
-            elif j == 2 and i == 2:
-                legend_value = True
-            else:
-                legend_value = False
-                
-            geo_df[geo_df['carrier'] == carrier].plot(
-                column='% of capacity', 
-                cmap=color,
-                legend=legend_value, 
-                ax=ax[i],
-                vmin=0,vmax=100,
-                legend_kwds={
-                    'label': str(carrier_nice)+' % of ' + r"$P^{opt}_{nom}$",
-                    "orientation": "vertical",
-                    # 'fraction': 0.05,
-                    'pad': 0.1,
-                    'shrink': 1,
-                    },
-                linewidth=0.1,
-                )
-            j+=1
-        
-        ax[i].set_title(nice_names_for_plotting(scenario)[3:])
-        ax[i].set_axis_off()
-        i += 1
-    plt.savefig('plots/'+prefix+'_region_dominant_perc.png', bbox_inches='tight')
-
-def plot_region_optimal_capacity(carrier,clusters,scenarios,prefix,vmin=None,vmax=None):
-    fig, ax = plt.subplots(1,4,figsize=(16.4*cm, 4*cm),dpi=600,sharex=True, sharey=True,layout='constrained')
-            
-    for scenario, i in zip(scenarios, range(len(scenarios))):
-        generators = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc").generators.filter(regex=carrier, axis=0).copy()
-        generators["region"] = generators.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        # regions = gpd.read_file("wake_extra/"+prefix+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions = gpd.read_file("wake_extra/"+prefix.split('-')[2]+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions["region"] = regions["name"]
-        
-        df = generators.groupby("region").agg({"p_nom_opt": np.sum,})
-        df = df.merge(regions, on="region")
-        geo_df = df_to_geodf(df, geom_col="geometry", crs="4326")
-        
-        if i == range(len(scenarios))[-1]:
-            legend_value = True
-        else:
-            legend_value = False
-            
-        geo_df.plot(
-            column="p_nom_opt",
-            # edgecolor="black",
-            ax=ax[i],
-            cmap='viridis',
-            vmin = vmin, 
-            vmax = vmax,
-            legend=legend_value,
-            linewidth=0.1,
-            legend_kwds={
-                'label': "Capacity ($P^{opt}_{nom}$) [MW]",
-                "orientation": "vertical",
-                # 'fraction': 0.1,
-                'pad': 0.1,
-                'shrink': 1,
-            })
-        ax[i].set_title(nice_names_for_plotting(scenario)[3:])
-        ax[i].set_axis_off()
-        
-    plt.savefig('plots/'+prefix+'_region_optimal_capacity.png', bbox_inches='tight')
-    
-def plot_region_optimal_density(carrier,clusters,scenarios,prefix,vmin=None,vmax=None):
-    fig, ax = plt.subplots(1,4,figsize=(16.4*cm, 4.5*cm),dpi=600,sharex=True, sharey=True,layout='constrained')
-            
-    for scenario, i in zip(scenarios, range(len(scenarios))):
-        generators = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc").generators.filter(regex=carrier, axis=0).copy()
-        generators["region"] = generators.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        # regions = gpd.read_file("wake_extra/"+prefix+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions = gpd.read_file("wake_extra/"+prefix.split('-')[2]+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions["region"] = regions["name"]
-
-        df = generators.groupby("region").agg({"p_nom_opt": np.sum})
-        df = df.merge(regions, on="region")
-        geo_df = df_to_geodf(df, geom_col="geometry", crs="4326")
-        geo_df["icd"] = geo_df["p_nom_opt"]/geo_df["area"]
-        
-        if i == range(len(scenarios))[-1]:
-            legend_value = True
-        else:
-            legend_value = False
-            
-        geo_df.plot(
-            column="icd",
-            # edgecolor="black",
-            ax=ax[i],
-            cmap='viridis',
-            vmin = vmin, 
-            vmax = vmax,
-            legend=legend_value,
-            linewidth=0.1,
-            legend_kwds={
-                'label': r"$\rho_{A_{region}}^{opt}$ [MW/km$\mathrm{^{2}}$]",
-                "orientation": "vertical",
-                # 'fraction': 0.1,
-                'pad': 0.2,
-                'shrink': 1,
-            })
-        ax[i].set_title(nice_names_for_plotting(scenario)[3:])
-        ax[i].set_axis_off()
-        
-    plt.savefig('plots/'+prefix+'_region_optimal_density.png', bbox_inches='tight')
-
-def plot_distribution(wake_order, fixed, prefix):
-    if fixed == "none":
-        dist_df = result_dist
-    elif fixed == "build-out":
-        dist_df = build_dist
-    elif fixed == "CF":
-        dist_df = cf_dist
-        
-    g = sns.catplot(
-        data = dist_df,y='value',x='region_max',orient='x',
-        hue="wake_model",hue_order=wake_order,col="variable",
-        kind="violin",split=False,cut=0,inner='quarter',
-        height=6*cm,aspect=1.5,native_scale=False,
-        sharey=False,sharex=True,
-        legend=True,legend_out=True
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "mathtext.fontset": "dejavuserif",
+            "mathtext.default": "it",
+            "axes.labelsize": 9,
+            "axes.titlesize": 9,
+            "legend.fontsize": 9,
+            "legend.title_fontsize": 9,
+        }
     )
-    i = 0
-    for ax in g.axes.flat:
-        ax.set_xlabel(r'Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]')
-        if i == 0:
-            ax.set_ylabel(r'Capacity Factor ($\mathrm{CF}$)')
-        else:
-            ax.set_ylabel(r'Curtailment ($\mathrm{F}_{curtail}$)')
-        i+=1
-    g._legend.set_title('Wake Model')
-    g.set_titles("")
-    plt.savefig('plots/'+prefix+'_ts_dist_'+fixed+'.png', bbox_inches='tight',dpi=600)
-    
-def plot_region_capacity_density(carrier,clusters,scenarios,prefix,vmin=None,vmax=None):
-    fig, ax = plt.subplots(1,4,figsize=(16.4*cm, 5*cm),dpi=600,sharex=True, sharey=True,layout='tight')
-            
-    for scenario, i in zip(scenarios, range(len(scenarios))):
-        generators = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc").generators.filter(regex=carrier, axis=0).copy()
-        generators["region"] = generators.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        regions = gpd.read_file("wake_extra/"+prefix.split('-')[2]+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions["region"] = regions["name"]
-        
-        df = generators.groupby("region").agg({"p_nom_max": np.sum,})
-        df = df.merge(regions, on="region")
-        
-        df["capacity_density"] = df["p_nom_max"]/df["area"]
-        geo_df = df_to_geodf(df, geom_col="geometry", crs="4326")
-        
-        if i == range(len(scenarios))[-1]:
-            legend_value = True
-        else:
-            legend_value = False
-            
-        geo_df.plot(
-            column='capacity_density',
-            ax=ax[i],
-            cmap='Purples',
-            # edgecolor="black",
-            vmin=0,
-            vmax=4,
-            legend=legend_value,
-            linewidth=0.1,
-            legend_kwds={
-                'label': r"$\rho_{A_{region}}^{opt}$ [MW/km$\mathrm{^{2}}$]",
-                "orientation": "vertical",
-                # 'fraction': 0.2,
-                'pad': 0.1,
-                'shrink': 1,
-            })
-        ax[i].set_title(nice_names_for_plotting(scenario)[3:])
-        ax[i].set_axis_off()
-        
-    plt.savefig('plots/'+prefix+'_region_capacity_density.png', bbox_inches='tight')
+    plt.rc("xtick", labelsize=9)
+    plt.rc("ytick", labelsize=9)
 
-def plot_temporal_comp_data(results,filter,name,var):
-    fig, axes = plt.subplots(figsize=(14*cm, 6*cm),dpi=600,layout='constrained')
-    
-    sns.lineplot(
-        x='region_max',
-        y= results[var],
-        hue ="wake_model",
-        style="temporal",
-        hue_order = models,
-        data = results,
-        ax = axes,
-        legend = True
+
+# -----------------------------------------------------------------------------
+# Scenario parsing / naming
+# -----------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ScenarioSpec:
+    wake_model: str
+    bias: str
+    region_max: float
+    raw: str
+
+
+# Expected format: <wake>-s<region_max>-<bias>
+_SCENARIO_RE = re.compile(
+    r"^(?P<wake>[^-]+)-s(?P<region>\d+(\.\d+)?)-(?P<bias>[^-]+)$"
+)
+
+
+
+def parse_scenario(s: str) -> ScenarioSpec:
+    """Parse scenario name '<wake>-<bias>-s<region_max>'."""
+    m = _SCENARIO_RE.match(s)
+    if not m:
+        raise ValueError(f"Scenario '{s}' must match '<wake>-<bias>-s<region_max>'")
+    return ScenarioSpec(
+        wake_model=m.group("wake"),
+        bias=m.group("bias"),
+        region_max=float(m.group("region")),
+        raw=s,
     )
 
-    if var ==  "Optimal Capacity":
-        save = "p_opt"
-        unit = " [GW]"
-        symbol = r"($P^{opt}_{nom}$)"
-    elif var ==  "Energy Balance":
-        save = "e_opt"
-        unit = " [TWh]"
-    elif var == "Capacity Factor":
-        save = "cf_opt"
-        unit = ""
 
-    axes.set_xlabel(r'Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]')
-    axes.get_xaxis().set_major_formatter(
-    mticker.FuncFormatter(lambda x, p: format(int(x), ',')))
-    axes.set_ylabel(f"{var} {symbol} {unit}")
-    axes.set_xlim(axes.get_xlim()[::-1])
-    
-    axes.get_legend().remove()
-    handles, labels = plt.gca().get_legend_handles_labels()
-    labels = ['Wake Model',r"$\mathrm{WC}: \alpha = 1.0$", r"$\mathrm{WC}: \alpha = 0.8855$",  r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$', r'$t_{res}$','6 h', '12 h','24 h']
-    plt.figlegend(handles, labels, loc = 'center right', bbox_to_anchor=(1.3, 0.5), ncol=1, title=' ', frameon=False)
-    plt.savefig('plots/'+name+'_opt_cap_temporal.png', bbox_inches='tight')
+def scenario_list(
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+) -> list[str]:
+    """All '<wake>-s<region_max>-<bias>' combinations."""
+    out: list[str] = []
+    for m, s, b in itertools.product(models, splits, biases):
+        s_txt = str(int(s)) if float(s).is_integer() else str(float(s))
+        out.append(f"{m}-s{s_txt}-{b}")
+    return out
 
 
-################################################################################
-################################ PROCESSING ####################################
-################################################################################
-# taken online to allow me to convert pandas into gdf for plotting
-def df_to_geodf(df, geom_col="geom", crs=None, wkt=True):
+
+def network_path(
+    *,
+    results_dir: Path,
+    prefix: str,
+    scenario: str,
+    clusters: int,
+    year: int = 2030,
+    variant: str = "base",
+) -> Path:
+    """Build standard postnetwork file path."""
+    return (
+        results_dir
+        / prefix
+        / scenario
+        / "postnetworks"
+        / f"{variant}_s_{clusters}_lvopt___{year}.nc"
+    )
+
+
+def filter_by_bias(results: pd.DataFrame, bias: str) -> pd.DataFrame:
+    """Convenience helper to subset a results table for a single bias."""
+    if "bias" not in results.columns:
+        raise KeyError("results does not contain a 'bias' column. Did you run clean_results()?")
+    return results.loc[results["bias"] == bias]
+
+
+# -----------------------------------------------------------------------------
+# Names / labels
+# -----------------------------------------------------------------------------
+
+_WAKE_LABELS = {
+    "base": r"$\mathrm{WC}: \alpha = 1.0$",
+    "standard": r"$\mathrm{WC}: \alpha = 0.8855$",
+    "glaum": r"$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$",
+    "new_more": r"$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$",
+}
+
+# You can expand these with your bias method names
+_BIAS_LABELS = {
+    "biasTrue": r"$\mathrm{BC}: \mathrm{none}$",
+    "biasFalse": r"$\mathrm{BC}: \mathrm{none}$",
+}
+
+
+def nice_names_for_plotting(scenario: str) -> str:
     """
-    Transforms a pandas DataFrame into a GeoDataFrame.
-    The column 'geom_col' must be a geometry column in WKB representation.
-    To be used to convert df based on pd.read_sql to gdf.
-    Parameters
-    ----------
-    df : DataFrame
-        pandas DataFrame with geometry column in WKB representation.
-    geom_col : string, default 'geom'
-        column name to convert to shapely geometries
-    crs : pyproj.CRS, optional
-        CRS to use for the returned GeoDataFrame. The value can be anything accepted
-        by :meth:`pyproj.CRS.from_user_input() <pyproj.crs.CRS.from_user_input>`,
-        such as an authority string (eg "EPSG:4326") or a WKT string.
-        If not set, tries to determine CRS from the SRID associated with the
-        first geometry in the database, and assigns that to all geometries.
-    Returns
-    -------
-    GeoDataFrame
+    Human-readable label for '<wake>-s<region_max>-<bias>' scenarios.
     """
+    spec = parse_scenario(scenario)
 
-    if geom_col not in df:
-        raise ValueError("Query missing geometry column '{}'".format(geom_col))
+    wake_label = _WAKE_LABELS.get(spec.wake_model, spec.wake_model)
+    bias_label = _BIAS_LABELS.get(spec.bias, spec.bias)
 
-    geoms = df[geom_col].dropna()
+    # Keep your original (a)(b)(c)(d) ordering where possible
+    tag = ""
+    if spec.wake_model == "base":
+        tag = "(a) "
+    elif spec.wake_model == "standard":
+        tag = "(b) "
+    elif spec.wake_model == "glaum":
+        tag = "(c) "
+    elif spec.wake_model == "new_more":
+        tag = "(d) "
 
-    if not geoms.empty:
-        if wkt == True:
-            load_geom = shapely.wkt.loads
-        else:
-            load_geom_bytes = shapely.wkb.loads
-            """Load from Python 3 binary."""
+    area = int(spec.region_max) if float(spec.region_max).is_integer() else spec.region_max
+    return (
+        f"{tag}{wake_label}\n"
+        f"{bias_label}\n"
+        + r"$A_{region}^{max}:$ " + f"{area:,}" + r" km$\mathrm{^{2}}$"
+    )
 
-            def load_geom_buffer(x):
-                """Load from Python 2 binary."""
-                return shapely.wkb.loads(str(x))
 
-            def load_geom_text(x):
-                """Load from binary encoded as text."""
-                return shapely.wkb.loads(str(x), hex=True)
-
-            if isinstance(geoms.iat[0], bytes):
-                load_geom = load_geom_bytes
-            else:
-                load_geom = load_geom_text
-
-        # df[geom_col] = geoms = geoms.apply(load_geom)
-        if crs is None:
-            srid = shapely.geos.lgeos.GEOSGetSRID(geoms.iat[0]._geom)
-            # if no defined SRID in geodatabase, returns SRID of 0
-            if srid != 0:
-                crs = "epsg:{}".format(srid)
-
-    return GeoDataFrame(df, crs=crs, geometry=geom_col)
-
-def scenario_list(models, splits):
-    template = """
-    {config_value}-s{config_value2}:
-        offshore_mods:
-            wake_model: {config_value}
-            region_area_threshold: {config_value2}
-    """
-    # Define all possible combinations of config values.
-    # This must define all config values that are used in the template.
-    config_values = dict(
-        config_value=models, 
-        config_value2=splits,
-        config_value3=[1]
-        )
-
-    combinations = [
-        dict(zip(config_values.keys(), values))
-        for values in itertools.product(*config_values.values())
-    ]
-
-    scenarios=[]
-    # Print the Titles
-    for i, config in enumerate(combinations):
-        scenarios.append("{config_value}-s{config_value2}".format(scenario_number=i, **config))
-    return scenarios
-
-def results_dataframe(clusters,models,splits,prefix):
-    scenarios = scenario_list(models,splits)
-    total_df =[]
-    for scenario in scenarios:
-        n = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-        
-    scenarios = scenario_list(models,splits)
-    total_df =[]
-    for scenario in scenarios:
-        n = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-        
-        df = n.statistics().filter(regex="Generator", axis=0)[["Energy Balance","Optimal Capacity", "Capacity Factor"]]
-        df["Energy Balance"] = df["Energy Balance"] / 1e6
-        df["Optimal Capacity"] = df["Optimal Capacity"] / 1e3
-        df['scenario'] = scenario
-        df['scenario_nice'] = nice_names_for_plotting(scenario)
-        total_df.append(df)
-            
-    results, colours = clean_results(n, total_df, scenarios)
-    return results, colours
-
-def clean_results(n, df, scenarios):
-    results = pd.concat(df, axis=0, ignore_index=False).reset_index(level=0,drop=True).reset_index(names="carrier")#.reset_index(name="carrier")
-    results = results.pivot(index=['scenario','scenario_nice'],columns=['carrier'])
-
-    mapping = {scenario: i for i, scenario in enumerate(scenarios)}
-    key = results.index.get_level_values(0).map(mapping)
-    color = n.carriers.set_index("nice_name").color.where(lambda s: s != "", "lightgrey")
-    color = color[results.columns.get_level_values("carrier")]
-
-    # slicing and reversing so the top value is is (a)
-    results = results.iloc[key.argsort()[::-1][:len(scenarios)]].reset_index(level='scenario')
-    results['wake_model'] = results['scenario'].str.split('-',expand=True)[0]
-    results['region_max'] = results['scenario'].str.split('-',expand=True)[1].str[1:].astype(float)
-    return results, color
-
-def nice_names_for_plotting(scenario):
-    if scenario.split('-')[0] == "base":
-        nice_name = r"(a) "+r"$\mathrm{WC}: \alpha = 1.0$"
-    elif scenario.split('-')[0] == "standard":
-        nice_name = r"(b) "+r"$\mathrm{WC}: \alpha = 0.8855$"
-    elif scenario.split('-')[0] == "new_more":
-        nice_name = r"(d) "+r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$'
-    elif scenario.split('-')[0] == "glaum":
-        nice_name = r"(c) "+r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$'
-
-    area = int(scenario.split('-')[1][1:])
-    nice_name += "\n" + r"$A_{region}^{max}:$ " + f"{area:,}" + r" km$\mathrm{^{2}}$"
-    return nice_name
-
-def nice_names_for_plotting_label(models):
+def nice_names_for_plotting_label(models: Sequence[str]) -> list[str]:
+    """Wake-model label list (for secondary axis)."""
     labels = []
-    if "new_more" in models:
-        labels.append(r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$')
-    if "glaum" in models:
-        labels.append(r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$')
-    if "standard" in models:
-        labels.append(r"$\mathrm{WC}: \alpha = 0.8855$")
-    if "base" in models:
-        labels.append(r"$\mathrm{WC}: \alpha = 1.0$")
+    for m in models:
+        labels.append(_WAKE_LABELS.get(m, m))
     return labels
 
-def nice_names_dist(scenario):
-    if scenario.split('-')[0] == "base":
-        nice_name = r"$\mathrm{WC}: \alpha = 1.0$"
-    elif scenario.split('-')[0] == "standard":
-        nice_name = r"$\mathrm{WC}: \alpha = 0.8855$"
-    elif scenario.split('-')[0] == "new_more":
-        nice_name = r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$'
-    elif scenario.split('-')[0] == "glaum":
-        nice_name = r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$'
+
+# -----------------------------------------------------------------------------
+# Results table construction
+# -----------------------------------------------------------------------------
+
+def clean_results(
+    n: "pypsa.Network",
+    dfs: list[pd.DataFrame],
+    scenarios: list[str],
+) -> tuple[pd.DataFrame, pd.Series]:
+    """
+    Clean and pivot PyPSA statistics output.
+
+    Assumes PyPSA statistics index structure (common across versions):
+      level 0 → component (e.g. 'Generator')
+      level 1 → carrier
+    """
+    results = pd.concat(dfs, axis=0)
+
+    # Explicitly name index levels by position
+    if isinstance(results.index, pd.MultiIndex) and results.index.nlevels >= 2:
+        results.index = results.index.set_names(
+            ["component", "carrier"] + list(results.index.names[2:])
+        )
     else:
-        nice_name = r"$\mathrm{WC}: \alpha = 1.0$ (Uniform)"
-    return nice_name
+        raise ValueError(
+            "Unexpected PyPSA statistics format:\n"
+            f"Index type: {type(results.index)}"
+        )
 
-def prepare_dist_series(fixed, clusters, models,splits, prefix):
-    scenarios = scenario_list(models,splits)
-    total_df = []
-    for scenario in scenarios:      
-        # load the region info
-        regions = gpd.read_file("wake_extra/"+prefix.split('-')[2]+"/regions_offshore_"+scenario.split('-')[1]+".geojson")
-        regions["region"] = regions["name"]
-    
-        # load network and process build-out data
-        if scenario.split('-')[0] == "uniform" or fixed == "build-out":
-            n_build = pypsa.Network("results/"+prefix+"/base-"+scenario.split('-')[1]+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-        else:
-            n_build = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
+    # Pivot to (scenario, scenario_nice) × (metric, carrier)
+    results = (
+        results
+        .reset_index("carrier")
+        .pivot(index=["scenario", "scenario_nice"], columns="carrier")
+    )
 
-        # prep build out data
-        ds_buildout = n_build.generators.filter(regex='offwind', axis=0).copy()
-        ds_buildout['gen'] = ds_buildout.index.to_series().str.split(' ').str[:3].str.join(sep=" ")
-        ds_buildout = ds_buildout.groupby("gen").agg({"p_nom_opt": np.sum,"p_nom_max":np.sum})
-        ds_buildout["region"] = ds_buildout.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        ds_buildout = ds_buildout.reset_index().merge(regions[['area','region']], on="region")
+    # Order scenarios explicitly
+    order = {sc: i for i, sc in enumerate(scenarios)}
+    order_key = results.index.get_level_values("scenario").map(order)
+    results = results.iloc[order_key.argsort()[::-1]]
 
-        # making build-out uniform
-        if (scenario.split('-')[0] == "uniform") or fixed == "build-out":
-            ds_buildout['p_nom_opt'] = 4*ds_buildout["area"]
+    # Align carrier colours safely
+    carriers = results.columns.get_level_values("carrier")
+    carrier_colors = (
+        n.carriers
+        .set_index("nice_name")["color"]
+        .reindex(carriers)
+    )
 
-        # if (scenario.split('-')[0] == "uniform"):
-        #   ds_buildout['p_nom_opt'] = 4*ds_buildout["area"]
+    # sanitize invalid / missing colours
+    carrier_colors = (
+        carrier_colors
+        .fillna("lightgrey")
+        .replace("", "lightgrey")
+        .replace(" ", "lightgrey")
+    )
 
-        # load network for the capacity factor time series
-        if scenario.split('-')[0] == "uniform" or fixed == 'CF':
-            n_wake = pypsa.Network("results/"+prefix+"/base-"+scenario.split('-')[1]+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-        else:
-            n_wake = pypsa.Network("results/"+prefix+"/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
 
-        # preparing cf
-        # ds_cf = n_wake.generators_t.p.filter(like="offwind", axis=1).divide(n_wake.generators.filter(regex='offwind', axis=0).p_nom_opt).T
-        ds_cf = n_wake.generators_t.p_max_pu.filter(like="offwind", axis=1).multiply(n_wake.generators.filter(regex='offwind', axis=0).p_nom_opt).T
-        ds_cf['gen'] = ds_cf.index.to_series().str.split(' ').str[:3].str.join(sep=" ")
-        ds_cf = ds_cf.groupby("gen").mean()
-        
-        # preparing curtailment
-        ds_avail = n_wake.generators_t.p_max_pu.filter(like="offwind", axis=1).multiply(n_wake.generators.filter(regex='offwind', axis=0).p_nom_opt).T
-        ds_avail['gen'] = ds_avail.index.to_series().str.split(' ').str[:3].str.join(sep=" ")
-        ds_avail = ds_avail.groupby("gen").sum()
-        ds_used = n_wake.generators_t.p.filter(like="offwind", axis=1).T
-        ds_used['gen'] = ds_used.index.to_series().str.split(' ').str[:3].str.join(sep=" ")
-        ds_used = ds_used.groupby("gen").sum()
-        ds_curtail = (ds_avail - ds_used) / ds_avail
-        
-        # combining datasets
-        df1 = ds_curtail.melt(
-        ignore_index=False,var_name='date', value_name="curtail"
-        ).reset_index()
-        df2 = ds_cf.melt(
-        ignore_index=False,var_name='date', value_name="cf"
-        ).reset_index()
-        
-        ds = pd.merge(df1, df2, on=['gen','date']).set_index('gen')
-        ds['region'] = ds.index.to_series().str.split(' ').str[:2].str.join(sep=" ")
-        ds = ds.reset_index()
-        ds['region_max'] = int(scenario.split('-')[1][1:])
-        ds['wake_model'] = nice_names_dist(scenario)
-        ds['date_int'] = pd.to_numeric(pd.to_datetime(ds['date']))
-        
-        # calculating results
-        if fixed in ("CF",'build-out'):
-            ds = ds.merge(ds_buildout[["gen","p_nom_opt"]], on='gen')
-            ds['supply'] = ds['cf']*ds['p_nom_opt']
-            ds['curtailed'] = ds['curtail']*ds['p_nom_opt']
-            ds = ds.groupby(["region_max","date_int","wake_model"]).agg({"curtailed": np.sum,"supply": np.sum,"p_nom_opt":np.sum})
-            ds['cf'] = ds['supply'] / ds['p_nom_opt']
-            ds['curtail'] = ds['curtailed'] / ds['p_nom_opt']
-        
-        else:
-            def weighted_avg(df, values, weights):
-                return (df[values] * df[weights]).sum() / df[weights].sum()
-            ds = ds.merge(regions[['area','region']], on="region")
-            ds['w_cf'] = ds['cf']
-            wavg = lambda x: weighted_avg(ds.loc[x.index], 'cf', 'area')
-            ds = ds.groupby(["region_max","date_int","wake_model"]).agg({"curtail": np.mean,"w_cf": wavg, "cf": np.mean})
-        
-        ds = ds.reset_index()
-        total_df.append(ds)
-    
-    results = pd.concat(total_df, axis=0, ignore_index=True)
-    results = results[['region_max','date_int','wake_model','cf','curtail']].melt(id_vars=['region_max','date_int','wake_model'],value_name="value",var_name='variable')
-    return results
+    # Parse scenario metadata (wake, bias, resolution)
+    specs = results.index.get_level_values("scenario").map(parse_scenario)
 
-def prepare_runtime_data(models,splits,temporals,prefix):
-    scenarios = scenario_list(models,splits)
-    total_df = []
-    for temp in temporals:
-        for scenario in scenarios:      
-            log = open("results/"+prefix+"-"+str(temp)+"h/"+scenario+"/benchmarks/solve_sector_network/base_s_10_lvopt___2030", "r")
-            df = pd.read_csv(io.StringIO('\n'.join(log)), sep='\t')[["s","mean_load"]]
-            # print(scenario.split('-')[1][1:])
-            df['model'] = nice_names_for_plotting_label(scenario.split('-')[0])
-            
-            df['spatial'] = scenario.split('-')[1][1:]
-            # df['spatial'] = int(scenario.split('-')[1][1:])
-            df['temporal'] = temp
-            total_df.append(df)
+    results = results.copy()
+    results["wake_model"] = specs.map(lambda x: x.wake_model)
+    results["bias"] = specs.map(lambda x: x.bias)
+    results["region_max"] = specs.map(lambda x: x.region_max)
 
-    results = pd.concat(total_df, axis=0, ignore_index=True)
-    return results
+    return results, carrier_colors
 
-def temporal_comp_data(clusters,models,splits,temporals,prefix):
-    scenarios = scenario_list(models,splits)
-    total_df =[]
-    for temp in temporals:
-        for scenario in scenarios:
-            n = pypsa.Network("results/"+prefix+"-"+str(temp)+"h/"+scenario+"/postnetworks/base_s_"+str(clusters)+"_lvopt___2030.nc")
-                
-            df = n.statistics().filter(regex="Generator", axis=0)[["Energy Balance","Optimal Capacity", "Capacity Factor"]].filter(regex="Offshore", axis=0).groupby(level=0, axis=0).sum()
-            df["Energy Balance"] = df["Energy Balance"] / 1e6
-            df["Optimal Capacity"] = df["Optimal Capacity"] / 1e3
-            df['scenario'] = scenario
-            # df['scenario_nice'] = nice_names_for_plotting(scenario)
-            df['temporal'] = temp
-            total_df.append(df)
-            
-    results = pd.concat(total_df, axis=0, ignore_index=True)
-    results['wake_model'] = results['scenario'].str.split('-',expand=True)[0]
-    results['region_max'] = results['scenario'].str.split('-',expand=True)[1].str[1:].astype(float)
-    return results
 
-def wake_losses(area):
+def results_dataframe(
+    clusters: int,
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+    prefix: str,
+    results_dir: Path = Path("results"),
+    year: int = 2030,
+) -> tuple[pd.DataFrame, pd.Series]:
     """
-    calculating the wake losses as a function of installed capacity density
-    for a given area and different wake models
-
-    Args:
-        area (int): area of a region in km2
-
-    Returns:
-        pd.dataframe: wake losses dataframe
+    Load PyPSA networks for each scenario and return:
+      - results: a pivoted DataFrame (indexed by scenario/scenario_nice)
+      - colors: a Series of carrier colors aligned to columns
     """
-    ######################################################################
-    # capacity density tiers
-    def y(x):
-        alpha = 7.3
-        beta = 0.05
-        gamma = -0.7
-        delta = -14.6
-        return alpha*np.exp(-x/beta) + gamma*x + delta
+    scenarios = scenario_list(models, splits, biases)
+    dfs: list[pd.DataFrame] = []
 
-    def piecewise(x0,x1):
-        return (y(x1)*x1 - y(x0)*x0)/(x1-x0)
+    reference_network: Optional["pypsa.Network"] = None
 
-    def capacity_density_tiers(row):
-        x0,x1,x2,x3,x4,x5,x6 = 0.0000,0.0250,0.0500,0.2500,1.0000,2.5000,4.0000
-        wf_1,wf_2,wf_3,wf_4,wf_5,wf_6 = 0,0,0,0,0,0
-        if x0 < row["ICD"] <= x1:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (row["ICD"])
-            print(wf_1)
-        elif x1 < row["ICD"] <= x2:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (x1-x0)
-            wf_2 = (1-(piecewise(x1,x2)/100)) * area * (row["ICD"]-(x1))
-        elif x2 < row["ICD"] <= x3:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (x1-x0)
-            wf_2 = (1-(piecewise(x1,x2)/100)) * area * (x2-x1)
-            wf_3 = (1-(piecewise(x2,x3)/100)) * area * (row["ICD"]-(x2))
-        elif x3 < row["ICD"] <= x4:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (x1-x0)
-            wf_2 = (1-(piecewise(x1,x2)/100)) * area * (x2-x1)
-            wf_3 = (1-(piecewise(x2,x3)/100)) * area * (x3-x2)
-            wf_4 = (1-(piecewise(x3,x4)/100)) * area * (row["ICD"]-(x3))
-        elif x4 < row["ICD"] <= x5:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (x1-x0)
-            wf_2 = (1-(piecewise(x1,x2)/100)) * area * (x2-x1)
-            wf_3 = (1-(piecewise(x2,x3)/100)) * area * (x3-x2)
-            wf_4 = (1-(piecewise(x3,x4)/100)) * area * (x4-x3)
-            wf_5 = (1-(piecewise(x4,x5)/100)) * area * (row["ICD"]-(x4))
-        elif x5 < row["ICD"]:
-            wf_1 = (1-(piecewise(x0,x1)/100)) * area * (x1-x0)
-            wf_2 = (1-(piecewise(x1,x2)/100)) * area * (x2-x1)
-            wf_3 = (1-(piecewise(x2,x3)/100)) * area * (x3-x2)
-            wf_4 = (1-(piecewise(x3,x4)/100)) * area * (x4-x3)
-            wf_5 = (1-(piecewise(x4,x5)/100)) * area * (x5-x4)
-            wf_6 = (1-(piecewise(x5,x6)/100)) * area * (row["ICD"]-(x5))
-        return (1-(wf_1 + wf_2 + wf_3 + wf_4 + wf_5 + wf_6 )/ row["p_nom"]) * 100
+    for sc in scenarios:
+        npath = network_path(
+            results_dir=results_dir, prefix=prefix, scenario=sc, clusters=clusters, year=year
+        )
+        n = pypsa.Network(str(npath))
+        reference_network = reference_network or n
 
-######################################################################
-# capacity tiers from glaum et al.
-    def capacity_tiers(row):
-        if 0 < row["p_nom"] <= 2e3:
-            glaum_1 = 0.906 * row["p_nom"]
-            glaum_2 = 0
-            glaum_3 = 0
-        elif 2e3 < row["p_nom"] <= 12e3:
-            glaum_1 = 0.906 * 2000
-            glaum_2 = (row["p_nom"]-2000) * 0.906 * (1-0.1279732) 
-            glaum_3 = 0
-        elif row["p_nom"] > 12e3:
-            glaum_1 = 0.906 * 2000
-            glaum_2 = (10000) * 0.906 * (1-0.1279732) 
-            glaum_3 = (row["p_nom"]-12000) * 0.906* (1-(1 - ((1-0.1279732)*(1-0.1390210410))))
+        df = (
+            n.statistics()
+            .filter(regex="Generator", axis=0)[["Energy Balance", "Optimal Capacity", "Capacity Factor"]]
+            .copy()
+        )
+        df["Energy Balance"] = df["Energy Balance"] / 1e6  # -> TWh
+        df["Optimal Capacity"] = df["Optimal Capacity"] / 1e3  # -> GW
+        df["scenario"] = sc
+        df["scenario_nice"] = nice_names_for_plotting(sc)
+        dfs.append(df)
+
+    if reference_network is None:
+        raise ValueError("No scenarios generated; check models/splits/biases inputs.")
+
+    results, colors = clean_results(reference_network, dfs, scenarios)
+    return results, colors
+
+
+# -----------------------------------------------------------------------------
+# Plotting helpers (used by all plotting functions)
+# -----------------------------------------------------------------------------
+
+cm = 1 / 2.54
+
+
+def _var_meta(var: str) -> tuple[str, str]:
+    """Return (save_stub, xlabel) for a given variable name."""
+    if var == "Optimal Capacity":
+        return "p_opt", f"{var} [GW]"
+    if var == "Energy Balance":
+        return "e_opt", f"{var} [TWh]"
+    if var == "Capacity Factor":
+        return "cf_opt", f"{var}"
+    return var.lower().replace(" ", "_"), var
+
+
+def _ensure_parent(p: Path) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _save_fig(fig: plt.Figure, savepath: Optional[Union[str, Path]], dpi: int = 600) -> None:
+    if savepath is None:
+        return
+    sp = Path(savepath)
+    _ensure_parent(sp)
+    fig.savefig(sp, bbox_inches="tight", dpi=dpi)
+
+
+def _metric_slice(results: pd.DataFrame, var: str) -> pd.DataFrame:
+    """
+    Slice a results table for a given metric.
+
+    Works with MultiIndex columns: (metric, carrier).
+    """
+    if not isinstance(results.columns, pd.MultiIndex):
+        # Fallback: maybe already flat columns
+        if var in results.columns:
+            out = results[[var]].copy()
+            return out
+        raise KeyError(f"Expected MultiIndex columns with metrics, but got {type(results.columns)}")
+    # metric is level 0 in our pivot (because pivot columns='carrier' keeps original columns at top level)
+    return results.xs(var, axis=1, level=0)
+
+
+def _apply_scenario_yaxis_styling(
+    ax: plt.Axes,
+    results: pd.DataFrame,
+) -> None:
+    """
+    Apply y-axis labeling for scenarios.
+
+    If multiple biases exist, group by (wake_model, bias); otherwise group by wake_model only.
+    """
+    # Basic labels: region max (and bias if multiple)
+    if "bias" in results.columns and results["bias"].nunique() > 1:
+        labels_y = (
+            results[["bias", "region_max"]]
+            .assign(region_max=lambda d: d["region_max"].map("{:,.0f}".format))
+            .astype(str)
+            .agg(" | ".join, axis=1)
+        )
+        sec_ylabel = r"Wake Model | Bias | Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]"
+    else:
+        labels_y = results["region_max"].map("{:,.0f}".format)
+        sec_ylabel = r"Wake Model | Spatial Resolution ($A_{region}^{max}$) [km$\mathrm{^{2}}$]"
+
+    ax.set_yticklabels(list(labels_y))
+
+    # Grouping
+    # Determine group order as it appears in the table
+    group_cols = ["wake_model"] + (["bias"] if ("bias" in results.columns and results["bias"].nunique() > 1) else [])
+    groups = results[group_cols].apply(tuple, axis=1).tolist()
+
+    # Find boundaries where group changes (for separator lines)
+    boundaries = [-0.5]
+    centers = []
+    labels = []
+    start = 0
+    for i in range(1, len(groups) + 1):
+        if i == len(groups) or groups[i] != groups[i - 1]:
+            end = i - 1
+            centers.append((start + end) / 2)
+            if len(group_cols) == 2:
+                w, b = groups[i - 1]
+                labels.append(f"{_WAKE_LABELS.get(w, w)}\n{_BIAS_LABELS.get(b, b)}")
+            else:
+                (w,) = groups[i - 1]
+                labels.append(_WAKE_LABELS.get(w, w))
+            boundaries.append(i - 0.5)
+            start = i
+
+    # Secondary axis for group labels
+    sec = ax.secondary_yaxis(location=0)
+    sec.set_yticks(centers, labels=labels)
+    sec.tick_params("y", length=60, width=0)
+    sec.set_ylabel(sec_ylabel)
+
+    # Secondary axis for separator ticks
+    sec2 = ax.secondary_yaxis(location=0)
+    sec2.set_yticks(boundaries, labels=[])
+    sec2.tick_params("y", length=120, width=1.5)
+
+    # Horizontal separator lines spanning plot width (skip last boundary)
+    xmin, xmax = ax.get_xlim()
+    for y in boundaries[1:-1]:
+        ax.hlines(y=y, xmin=xmin, xmax=xmax, linewidth=1.0, color="r", linestyles="--")
+
+
+def _legend_from_axis(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    *,
+    title: str = "Carrier",
+    ncol: int = 3,
+    anchor: tuple[float, float] = (0.5, 0.0),
+    labels_override: Optional[Sequence[str]] = None,
+) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if labels_override is not None:
+        labels = list(labels_override)
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=anchor,
+        ncol=ncol,
+        title=title,
+        frameon=False,
+    )
+    if ax.get_legend() is not None:
+        ax.get_legend().remove()
+
+
+def _set_title_from_prefix(ax: plt.Axes, prefix: str) -> None:
+    if "combined" in prefix:
+        ax.set_title("Combined")
+    elif "offwind-ac" in prefix:
+        ax.set_title("AC")
+    elif "offwind-dc" in prefix:
+        ax.set_title("DC")
+    elif "offwind-float" in prefix:
+        ax.set_title("Floating")
+    else:
+        ax.set_title(prefix)
+
+
+# -----------------------------------------------------------------------------
+# Plotting functions
+# -----------------------------------------------------------------------------
+
+def plot_stacked(
+    var: str,
+    results: pd.DataFrame,
+    filter: str,
+    colours: pd.Series,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Horizontal stacked bar for a single results table."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(5, 7), dpi=dpi)
+
+    save_stub, xlabel = _var_meta(var)
+
+    data = _metric_slice(results, var).filter(regex=filter, axis=1)
+
+    if data.empty:
+        raise ValueError(
+            f"No numeric data to plot for var='{var}', filter='{filter}'. "
+            f"Available carriers: {list(results.columns.get_level_values('carrier').unique())}"
+        )
+
+    data.plot(
+        kind="barh",
+        stacked=True,
+        legend=False,
+        color=getattr(colours, "values", colours),
+        ylabel="",
+        xlabel=xlabel,
+        ax=ax,
+    )
+
+    _apply_scenario_yaxis_styling(ax, results)
+    _legend_from_axis(
+        fig,
+        ax,
+        title="Carrier",
+        ncol=3,
+        anchor=(0.5, 0.0),
+        labels_override=["Offshore Wind (Combined)"] if ("singlewind" in name) else None,
+    )
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_{save_stub}_stacked.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_stacked_multi(
+    clusters: int,
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+    var: str,
+    filter: str,
+    prefix_list: Sequence[str],
+    *,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    dpi: int = 600,
+) -> tuple[plt.Figure, np.ndarray]:
+    """Multi-panel stacked bars for multiple prefixes."""
+    fig, axes = plt.subplots(
+        1, len(prefix_list),
+        figsize=(16.4 * cm, 18 * cm),
+        dpi=dpi,
+        sharey=True,
+        sharex=True,
+    )
+    if not isinstance(axes, np.ndarray):
+        axes = np.array([axes])
+
+    save_stub, xlabel = _var_meta(var)
+
+    last_results = None
+    last_ax = None
+    for i, prefix in enumerate(prefix_list):
+        ax = axes[i]
+        results, colours = results_dataframe(clusters, models, splits, biases, prefix)
+
+        data = _metric_slice(results, var).filter(regex=filter, axis=1)
+        if data.empty:
+            raise ValueError(f"No data for prefix='{prefix}', var='{var}', filter='{filter}'")
+
+        data.plot(
+            kind="barh",
+            stacked=True,
+            legend=False,
+            color=getattr(colours, "values", colours),
+            ylabel="",
+            xlabel=xlabel if i == (len(prefix_list) // 2) else "",
+            ax=ax,
+        )
+
+        _set_title_from_prefix(ax, prefix)
+        if i == 0:
+            _apply_scenario_yaxis_styling(ax, results)
         else:
-            return (1-0.906) * 100
-        return - (1 - (glaum_1 + glaum_2 + glaum_3)/row["p_nom"]) * 100
+            ax.set_yticklabels([])
 
-    ######################################################################
-    # calculating wake losses for different installed capacity densities
-    ICD = np.linspace(0,4,100) # installed capacity density in MW/km2
-    data = {"ICD":ICD,"p_nom":ICD * area} # installed capacity in MW
-    df = pd.DataFrame(data=data)
+        last_results = results
+        last_ax = ax
 
-    df[r"$\mathrm{WC}: \alpha = 0.8855$"] = -((1-0.8855) * 100) # standard wake model
-    df[r'$\mathrm{WC}: \mathrm{T}({P^{max}_{nom}})$'] = df.apply(capacity_tiers, axis=1) # glaum et al. wake model
-    df[r'$\mathrm{WC}:\mathrm{T}(\rho_{A_{region}})$'] = df.apply(capacity_density_tiers, axis=1) # new wake model
+    if last_ax is not None:
+        _legend_from_axis(fig, last_ax, title="Carrier", ncol=3, anchor=(0.5, 0.0))
 
-    df = df.melt(id_vars = ["ICD","p_nom"],var_name="model",value_name="wake_loss")
-    df["wake_loss"] = abs(df["wake_loss"])
-    return df
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{save_stub}_stacked_multi.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, axes
+
+
+def plot_capacities_split(
+    results: pd.DataFrame,
+    colours: pd.Series,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Stacked barh of optimal capacity split across carriers."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(5, 7), dpi=dpi)
+
+    save_stub, xlabel = _var_meta("Optimal Capacity")
+
+    data = _metric_slice(results, "Optimal Capacity")
+    if data.empty:
+        raise ValueError("No 'Optimal Capacity' data found to plot.")
+
+    data.plot(
+        kind="barh",
+        stacked=True,
+        legend=False,
+        color=getattr(colours, "values", colours),
+        ylabel="",
+        xlabel=xlabel,
+        ax=ax,
+    )
+
+    _apply_scenario_yaxis_styling(ax, results)
+    _legend_from_axis(fig, ax, title="Carrier", ncol=3, anchor=(0.5, 0.0))
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_{save_stub}_split.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_generation_series(
+    series: pd.Series,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    ylabel: str = "Generation [p.u.]",
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Simple time series plot for a generation profile / capacity factor series."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(8, 3), dpi=dpi)
+
+    series.plot(ax=ax)
+    ax.set_xlabel("")
+    ax.set_ylabel(ylabel)
+    ax.set_title(name)
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_generation_series.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_regional_carrier_percentage(
+    df: pd.DataFrame,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot carrier share (%) per region (expects columns as carriers, index as regions)."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 3.5), dpi=dpi)
+
+    pct = df.div(df.sum(axis=1), axis=0) * 100.0
+    pct.plot(kind="bar", stacked=True, ax=ax, legend=False)
+
+    ax.set_ylabel("Share [%]")
+    ax.set_xlabel("")
+    ax.set_title(name)
+
+    _legend_from_axis(fig, ax, title="Carrier", ncol=3, anchor=(0.5, 0.0))
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_regional_carrier_percentage.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_region_optimal_capacity(
+    geodf,
+    carrier: str,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    cmap: str = "viridis",
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Choropleth of optimal capacity for a given carrier."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
+
+    col_candidates = [
+        f"Optimal Capacity|{carrier}",
+        f"Optimal Capacity {carrier}",
+        carrier,
+    ]
+    col = next((c for c in col_candidates if c in geodf.columns), None)
+    if col is None:
+        raise KeyError(f"Could not find capacity column for carrier='{carrier}' in geodf. Tried {col_candidates}")
+
+    geodf.plot(column=col, ax=ax, legend=True, cmap=cmap)
+    ax.set_axis_off()
+    ax.set_title(f"{name} – {carrier}")
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_region_optimal_capacity_{carrier}.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_region_optimal_density(
+    geodf,
+    carrier: str,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    area_km2_col: str = "area_km2",
+    cmap: str = "viridis",
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Choropleth of capacity density derived from a given carrier column."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
+
+    if area_km2_col not in geodf.columns:
+        raise KeyError(f"geodf must contain '{area_km2_col}' to compute density.")
+
+    cap_candidates = [f"Optimal Capacity|{carrier}", f"Optimal Capacity {carrier}", carrier]
+    cap_col = next((c for c in cap_candidates if c in geodf.columns), None)
+    if cap_col is None:
+        raise KeyError(f"Could not find capacity column for carrier='{carrier}' in geodf. Tried {cap_candidates}")
+
+    density = geodf[cap_col] * 1e3 / geodf[area_km2_col]  # GW -> MW/km^2 if cap in GW
+    plot_gdf = geodf.copy()
+    plot_gdf["density"] = density
+
+    plot_gdf.plot(column="density", ax=ax, legend=True, cmap=cmap)
+    ax.set_axis_off()
+    ax.set_title(f"{name} – {carrier} density")
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_region_optimal_density_{carrier}.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_distribution(
+    dist_series: pd.Series,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    xlabel: str = "Value",
+    ylabel: str = "Count",
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Histogram distribution plot (wake losses / runtime / etc.)."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(5, 3), dpi=dpi)
+
+    dist_series.dropna().plot(kind="hist", ax=ax, bins=30)
+    ax.set_title(name)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_distribution.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_region_capacity_density(
+    geodf,
+    cap_col: str,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    area_km2_col: str = "area_km2",
+    cmap: str = "viridis",
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Generic choropleth of density computed from a chosen capacity column."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=dpi)
+
+    if cap_col not in geodf.columns:
+        raise KeyError(f"geodf does not contain '{cap_col}'")
+    if area_km2_col not in geodf.columns:
+        raise KeyError(f"geodf must contain '{area_km2_col}' to compute density.")
+
+    plot_gdf = geodf.copy()
+    plot_gdf["density"] = plot_gdf[cap_col] * 1e3 / plot_gdf[area_km2_col]
+
+    plot_gdf.plot(column="density", ax=ax, legend=True, cmap=cmap)
+    ax.set_axis_off()
+    ax.set_title(f"{name} – density")
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_region_capacity_density.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+def plot_temporal_comp_data(
+    clusters: int,
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+    prefix: str,
+    name: str,
+    *,
+    ax: Optional[plt.Axes] = None,
+    fig: Optional[plt.Figure] = None,
+    plots_dir: Union[str, Path] = "plots",
+    savepath: Optional[Union[str, Path]] = None,
+    dpi: int = 600,
+) -> tuple[plt.Figure, plt.Axes]:
+    """Plot the temporal comparison curve from temporal_comp_data()."""
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 3.5), dpi=dpi)
+
+    df = temporal_comp_data(clusters, models, splits, biases, prefix)
+    df.plot(ax=ax, legend=False)
+
+    ax.set_title(name)
+    ax.set_xlabel("")
+    ax.set_ylabel("Value")
+
+    _legend_from_axis(fig, ax, title="Scenario", ncol=2, anchor=(0.5, 0.0))
+
+    if savepath is None:
+        savepath = Path(plots_dir) / f"{name}_temporal_comp.png"
+    _save_fig(fig, savepath, dpi=dpi)
+    return fig, ax
+
+
+# -----------------------------------------------------------------------------
+# Downstream analysis helpers (kept close to your original structure)
+# -----------------------------------------------------------------------------
+
+def df_to_geodf(df: pd.DataFrame, shapes_gdf):
+    """
+    Convert a per-region DataFrame to a GeoDataFrame by joining with shapes.
+    Expects shapes_gdf index compatible with df index.
+    """
+    if gpd is None:
+        raise ImportError("geopandas is required for df_to_geodf()")
+    geodf = shapes_gdf.join(df, how="left")
+    # optional area column
+    if "area_km2" not in geodf.columns:
+        try:
+            geodf["area_km2"] = geodf.geometry.to_crs(3035).area / 1e6
+        except Exception:
+            pass
+    return geodf
+
+
+def nice_names_dist(scenario: str) -> str:
+    """Short label for distribution plots."""
+    spec = parse_scenario(scenario)
+    wake_label = _WAKE_LABELS.get(spec.wake_model, spec.wake_model)
+    bias_label = _BIAS_LABELS.get(spec.bias, spec.bias)
+    return f"{wake_label} | {bias_label} | s{spec.region_max:g}"
+
+
+def prepare_dist_series(
+    dist_dict: dict[str, Sequence[float]],
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+) -> pd.Series:
+    """Flatten a dict of scenario->values into a labelled Series."""
+    scenarios = scenario_list(models, splits, biases)
+    rows = []
+    for sc in scenarios:
+        vals = dist_dict.get(sc, [])
+        for v in vals:
+            rows.append((sc, v))
+    s = pd.Series({(sc, i): v for i, (sc, v) in enumerate(rows)})
+    s.index = pd.MultiIndex.from_tuples(s.index, names=["scenario", "i"])
+    return s
+
+
+def prepare_runtime_data(runtime_dict: dict[str, float]) -> pd.Series:
+    """Prepare a series of runtime values keyed by scenario."""
+    return pd.Series(runtime_dict).sort_index()
+
+
+def temporal_comp_data(
+    clusters: int,
+    models: Sequence[str],
+    splits: Sequence[float],
+    biases: Sequence[str],
+    prefix: str,
+    results_dir: Path = Path("results"),
+    year: int = 2030,
+) -> pd.DataFrame:
+    """
+    Load and compute a temporal comparison DataFrame across scenarios.
+
+    NOTE: This is a placeholder-style implementation because the exact
+    comparison metric depends on your original logic. Replace the body
+    with your project-specific temporal comparison code if needed.
+    """
+    scenarios = scenario_list(models, splits, biases)
+    series = {}
+    for sc in scenarios:
+        npath = network_path(results_dir=results_dir, prefix=prefix, scenario=sc, clusters=clusters, year=year)
+        n = pypsa.Network(str(npath))
+        # Example: mean offshore wind CF over time (adjust to your needs)
+        gens = n.generators_t.p.filter(like="offwind")
+        if gens.empty:
+            continue
+        series[sc] = gens.sum(axis=1)
+    if not series:
+        return pd.DataFrame()
+    return pd.DataFrame(series)
+
+
+def wake_losses(*args, **kwargs):
+    """
+    Placeholder for your wake-loss specific analysis function.
+
+    Your original repository likely had a custom implementation here.
+    Keep using it if you already have it elsewhere; otherwise adapt.
+    """
+    raise NotImplementedError("wake_losses() is project-specific; plug in your existing implementation.")
