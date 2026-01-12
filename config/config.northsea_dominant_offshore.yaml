@@ -20,7 +20,7 @@ remote:
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: "manuscriptwake-2030-10-northsea-combined-12h"
+  prefix: "manuscriptwake-2030-10-northsea-dominant-12h"
   name:
   - base-s100000-biasFalse
   - base-s75000-biasFalse
@@ -58,10 +58,9 @@ run:
   - new_more-s5000-biasFalse
   - new_more-s2500-biasFalse
   - new_more-s1000-biasFalse
-
   scenarios:
     enable: true
-    file: config/scenarios-wake-combined.yaml
+    file: config/scenarios-wake.yaml
   disable_progressbar: false
   shared_resources:
     policy: base
@@ -113,9 +112,10 @@ co2_budget:
   2045: 0.032
   2050: 0.000
 
+########### MY ADDDITION
 offshore_mods:
   wake_model: base # base, standard, ellyess, glaum
-  mode: single
+  mode: dominant
   sea_shape: data/north_sea_shape_updated.geojson
   shared_files: northsea
   offshore_threshold: 100000 # area of regions
@@ -143,7 +143,7 @@ electricity:
     H2: 168
 
   extendable_carriers:
-    Generator: [offwind-combined, onwind, solar]
+    Generator: [offwind-ac, offwind-dc, offwind-float, onwind, solar]
     StorageUnit: [] # battery, H2
     Store: [battery, H2]
     Link: [] # H2 pipeline
@@ -153,7 +153,7 @@ electricity:
   everywhere_powerplants: []
 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
-  renewable_carriers: [solar, onwind, offwind-combined]
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, offwind-float]
 
   estimate_renewable_capacities:
     enable: false
@@ -161,7 +161,7 @@ electricity:
     year: 2020
     expansion_limit: false
     technology_mapping:
-      Offshore: [offwind-combined]
+      Offshore: [offwind-ac, offwind-dc, offwind-float]
       Onshore: [onwind]
       PV: [solar]
 
@@ -208,7 +208,7 @@ renewable:
     natura: true
     excluder_resolution: 100
     clip_p_max_pu: 1.e-2
-  offwind-combined:
+  offwind-ac:
     cutout: europe-2023-sarah3-era5
     resource:
       method: wind
@@ -217,14 +217,63 @@ renewable:
       smooth: false
       add_cutout_windspeed: true
     capacity_per_sqkm: 4
+    # correction_factor: 0.8855 # default
+    # correction_factor: 0.906 # glaum
     correction_factor: 1 # ellyess
     corine: [44, 255]
     luisa: false # [0, 5230]
     natura: true
     ship_threshold: 400
-    max_depth: 1000
+    max_depth: 60
     min_shore_distance: 1000
+    max_shore_distance: 30000
     excluder_resolution: 200
+    clip_p_max_pu: 1.e-2
+    landfall_length: 10
+  offwind-dc:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      method: wind
+      # turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      smooth: false
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    # correction_factor: 0.8855 # default
+    # correction_factor: 0.906 # glaum
+    correction_factor: 1 # ellyess
+    corine: [44, 255]
+    luisa: false # [0, 5230]
+    natura: true
+    ship_threshold: 400
+    max_depth: 60
+    min_shore_distance: 30000
+    excluder_resolution: 200
+    clip_p_max_pu: 1.e-2
+    landfall_length: 10
+  offwind-float:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      method: wind
+      # turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      smooth: false
+      add_cutout_windspeed: true
+    # ScholzPhd Tab 4.3.1: 10MW/km^2
+    capacity_per_sqkm: 4
+    # correction_factor: 0.8855 # default
+    # correction_factor: 0.906 # glaum
+    correction_factor: 1 # ellyess
+    # proxy for wake losses
+    # from 10.1016/j.energy.2018.08.153
+    # until done more rigorously in #153
+    corine: [44, 255]
+    natura: true
+    ship_threshold: 400
+    excluder_resolution: 200
+    min_shore_distance: 1000
+    min_depth: 60
+    max_depth: 1000
     clip_p_max_pu: 1.e-2
     landfall_length: 10
   solar:
@@ -340,7 +389,9 @@ pypsa_eur:
   - DC
   Generator:
   - onwind
-  - offwind-combined
+  - offwind-ac
+  - offwind-dc
+  - offwind-float
   - solar
   - ror
   - nuclear
@@ -848,7 +899,7 @@ clustering:
     hac_features:
     - wnd100m
     - influx_direct
-  exclude_carriers: ["offwind-dc"]
+  exclude_carriers: ["offwind-ac", "offwind-dc", "offwind-float"]
   consider_efficiency_classes: false
   aggregation_strategies:
     generators:
@@ -1012,7 +1063,6 @@ plotting:
     CCGT: "Combined-Cycle Gas"
     offwind-ac: "Offshore Wind (AC)"
     offwind-dc: "Offshore Wind (DC)"
-    offwind-combined: "Offshore Wind (Combined)"
     offwind-float: "Offshore Wind (Floating)"
     onwind: "Onshore Wind"
     solar: "Solar"
@@ -1041,9 +1091,6 @@ plotting:
     offwind-float: "#b5e2fa"
     offshore wind (Float): "#b5e2fa"
     offshore wind float: "#b5e2fa"
-    offwind-combined: "#74c6f2"
-    offshore wind (Combined): "#74c6f2"
-    offshore wind combined: "#74c6f2"
     # water
     hydro: '#298c81'
     hydro reservoir: '#298c81'

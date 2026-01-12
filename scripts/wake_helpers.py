@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union, Any, Mapping
 
 import numpy as np
 import pandas as pd
@@ -126,8 +126,10 @@ def availability_cache_path(
     Naming:
         availability_matrix_<clusters>_<technology>_<threshold|nosplit>.nc
     """
+    cache_root = wake_dir / "availability_matrices"
+    cache_root.mkdir(parents=True, exist_ok=True)
     thr = _threshold_token(threshold)
-    return wake_dir / f"availability_matrix_{clusters}_{technology}_{thr}.nc"
+    return cache_root / f"availability_matrix_{clusters}_{technology}_{thr}.nc"
 
 
 def profile_cache_path(
@@ -142,10 +144,48 @@ def profile_cache_path(
     Naming:
         profile_<clusters>_<technology>_<threshold|nosplit>[_bias<bias>].nc
     """
+    cache_root = wake_dir / "renewable_profiles"
+    cache_root.mkdir(parents=True, exist_ok=True)
     thr = _threshold_token(threshold)
     suffix = f"_bias{bias}" if bias is not None else ""
-    return wake_dir / f"profile_{clusters}_{technology}_{thr}{suffix}.nc"
+    return cache_root / f"profile_{clusters}_{technology}_{thr}{suffix}.nc"
 
+
+def solar_thermal_cache_path(
+    *,
+    wake_dir: Path,
+    clusters: int,
+) -> Path:
+    """
+    Return cache path for solar thermal profiles.
+
+    Stored under:
+        wake_extra/<shared_files>/solar_thermal_profiles/
+
+    Cache key changes if *any* effective input changes.
+    """
+
+    cache_root = wake_dir / "solar_thermal_profiles"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    return cache_root / f"solar_thermal_{clusters}.nc"
+
+
+def temperature_cache_paths(
+    *,
+    wake_dir: Path,
+    clusters: int,
+) -> tuple[Path, Path]:
+    """
+    Return cache paths for (air, soil) temperature.
+
+    Stored under:
+        wake_extra/<shared_files>/temperature_profiles/
+    """
+    cache_root = wake_dir / "temperature_profiles"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    air = cache_root / f"temp_air_{clusters}.nc"
+    soil = cache_root / f"temp_soil_{clusters}.nc"
+    return air, soil
 
 # -----------------------------------------------------------------------------
 # Region loading
@@ -242,31 +282,39 @@ class WakeSplitSpec:
 
 
 def _new_more_spec() -> Tuple[WakeSplitSpec, List[float]]:
-    """Return (spec, breakpoints) for the 'new_more' wake method."""
+    """
+    Density-tier spec (for the 'new_more' wake method) in MW/km^2 breakpoints (x), and marginal losses per tier.
+    Returns:
+        (spec, x_breaks) where x_breaks length = n_tiers+1
+    """
     def y(x: float) -> float:
         alpha = 7.3
         beta = 0.05
         gamma = -0.7
         delta = -14.6
-        return alpha * np.exp(-x / beta) + gamma * x + delta
+        return alpha * np.exp(-x / beta) + gamma * x + delta  # percent total loss
 
     def piecewise(x0: float, x1: float) -> float:
+        # average marginal over [x0,x1] for T(x) * x relationship
         return (y(x1) * x1 - y(x0) * x0) / (x1 - x0)
 
-    x = [0, 0.025, 0.05, 0.25, 1, 2.5, 4]
+    x = [0, 0.025, 0.05, 0.25, 1, 2.5, 4]  # MW/km^2 breakpoints
+    # Convert to marginal loss fractions (positive)
     factors = [-(piecewise(x[i], x[i + 1])) / 100.0 for i in range(len(x) - 1)]
     return WakeSplitSpec(factors=factors, max_caps=[]), x
 
 
 def _glaum_spec() -> WakeSplitSpec:
-    """Return segment definition for the 'glaum' wake method (after global derate)."""
+    """Capacity-tier spec in MW thresholds. Return segment definition for the 'glaum' wake method (after global derate)."""
     f2 = 0.1279732
     f3_extra = 0.13902848
     f3 = 1.0 - ((1.0 - f2) * (1.0 - f3_extra))
     return WakeSplitSpec(
-        factors=[0.0, f2, f3],
-        max_caps=[2e3, 10e3, np.inf],
+        factors=[0.0, f2, f3],           # Tier1, Tier2, Tier3 marginal losses (fractions)
+        max_caps=[2e3, 10e3, np.inf],    # MW segment caps (0–2GW, next 10GW => up to 12GW, then inf)
     )
+
+
 
 
 def _assign_segment_count_from_cumcaps(p_nom_max: np.ndarray, cumcaps: np.ndarray) -> np.ndarray:

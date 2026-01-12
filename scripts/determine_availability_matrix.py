@@ -191,16 +191,24 @@ if __name__ == "__main__":
             )
 
         if params.get("max_depth"):
-            # lambda not supported for atlite + multiprocessing
-            # use named function np.greater with partially frozen argument instead
-            # and exclude areas where: -max_depth > grid cell depth
             func = functools.partial(np.greater, -params["max_depth"])
-            excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
+            excluder.add_raster(
+                snakemake.input.gebco,
+                codes=func,
+                crs=4326,
+                nodata=-1000,
+                allow_no_overlap=True,
+            )
 
         if params.get("min_depth"):
             func = functools.partial(np.greater, -params["min_depth"])
             excluder.add_raster(
-                snakemake.input.gebco, codes=func, crs=4326, nodata=-1000, invert=True
+                snakemake.input.gebco,
+                codes=func,
+                crs=4326,
+                nodata=-1000,
+                invert=True,
+                allow_no_overlap=True,
             )
 
         if "min_shore_distance" in params:

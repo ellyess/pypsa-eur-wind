@@ -208,7 +208,7 @@ def padded_transform_and_shape(bounds, res):
 
 
 def projected_mask(
-    raster, geom, transform=None, shape=None, crs=None, allow_no_overlap=False, **kwargs
+    raster, geom, transform=None, shape=None, crs=None, allow_no_overlap=True, **kwargs
 ):
     """
     Load a mask and optionally project it to target resolution and shape.
