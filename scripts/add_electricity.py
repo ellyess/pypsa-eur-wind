@@ -133,6 +133,8 @@ from scripts.wake_helpers import (
     drop_non_dominant_offwind_generators,
 )
 
+from pathlib import Path
+
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
@@ -998,6 +1000,63 @@ def attach_stores(n, costs, extendable_carriers):
         )
 
 
+# FIX BUILD-OUT MAX_CAPACITY
+def _get_current_scenario(snakemake) -> str:
+    # your wildcards include `run`
+    return str(snakemake.wildcards.run)
+
+def _ref_scenario(current: str) -> str:
+    parts = current.split("-", 1)
+    return "base" if len(parts) == 1 else "base-" + parts[1]
+
+def _get_year(snakemake) -> int:
+    # robust for your pipeline (cost year is what matters for filename)
+    try:
+        return int(snakemake.params.costs["year"])
+    except Exception:
+        return int(snakemake.config["costs"]["year"])
+
+def _reference_postnetwork_path(snakemake, clusters: int) -> Path:
+    current = _get_current_scenario(snakemake)
+    ref_run = _ref_scenario(current)
+
+    root = snakemake.config.get("fixed_offwind", {}).get("results_root", None)
+    if not root:
+        raise ValueError("Set fixed_offwind.results_root in config to point at results/...")
+
+    year = _get_year(snakemake)
+    return Path(root) / ref_run / "postnetworks" / f"base_s_{clusters}_lvopt___{year}.nc"
+
+def apply_reference_offwind_buildout(n: pypsa.Network, ref_path: Path, carrier="offwind-combined"):
+    ref_path = Path(ref_path)
+    if not ref_path.is_file():
+        raise FileNotFoundError(f"Reference network not found: {ref_path}")
+
+    ref = pypsa.Network(ref_path)
+
+    mask = n.generators.carrier == carrier
+    if not mask.any():
+        return
+
+    ref_mask = ref.generators.carrier == carrier
+    if not ref_mask.any():
+        raise ValueError(f"Reference has no generators with carrier={carrier!r}: {ref_path}")
+
+    idx = n.generators.index[mask].intersection(ref.generators.index[ref_mask])
+    missing = n.generators.index[mask].difference(ref.generators.index[ref_mask])
+    if len(missing):
+        ex = ", ".join(list(missing[:5]))
+        raise ValueError(
+            "Offshore generators do not match reference (clustering/busmap/regions mismatch?). "
+            f"First missing in ref: {ex}"
+        )
+
+    n.generators.loc[idx, "p_nom"] = ref.generators.loc[idx, "p_nom"]
+    # Optional but useful: also lock bounds already at build stage
+    n.generators.loc[idx, "p_nom_min"] = n.generators.loc[idx, "p_nom"]
+    n.generators.loc[idx, "p_nom_max"] = n.generators.loc[idx, "p_nom_max"]  # leave siting potential untouched
+
+    
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1133,7 +1192,17 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
     
-
+    # --- Fixed build-out injection (so wake correction sees reference p_nom) ---
+    if snakemake.config.get("fixed_offwind", {}).get("enable", False):
+        clusters = int(snakemake.wildcards.clusters)
+        ref_path = _reference_postnetwork_path(snakemake, clusters=clusters)
+        logger.info(f"Injecting reference offwind build-out from: {ref_path}")
+        apply_reference_offwind_buildout(
+            n,
+            ref_path,
+            carrier=snakemake.config["fixed_offwind"].get("carrier", "offwind-combined"),
+        )
+    
     # 2) Apply wake effects
     wake_model = mods.get("wake_model", "base")
 

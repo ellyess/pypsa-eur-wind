@@ -1302,242 +1302,6 @@ def _density_tier_total_loss_on_density_axis(
     return T, (x_breaks, M_den)
 
 
-def plot_wake_models_capacity_and_density(
-    *,
-    A_ref_km2: float = 1000.0,
-    P_max_GW: float = 30.0,
-    x_max: float = 4.0,
-    alpha_uniform: float = 0.8855,  # uniform scaling factor => constant loss = 1-alpha
-    savepath: Optional[str] = None,
-    dpi: int = 600,
-) -> plt.Figure:
-    """
-    Review-proof wake-model figure (Option A).
-
-    Layout: 2x2
-        - Top-left: Total loss vs capacity P (GW)
-        - Top-right: Total loss vs density x (MW/km^2)
-        - Bottom-left: Marginal loss vs capacity P (step)
-        - Bottom-right: Marginal loss vs density x (step)
-
-    Both panels overlay BOTH tiered methods:
-        - capacity-tier (blue)
-        - density-tier (red)
-    plus:
-        - uniform scaling correction (dashed horizontal)
-        - no-wake baseline (dotted at 0)
-
-    Option A:
-        density-tier is extended on the P-axis beyond x_max via constant last marginal tier.
-    """
-    if sns is not None:
-        sns.set_theme(style="ticks")
-        sns.despine()
-
-    # --- specs ---
-    spec_cap = _glaum_spec()
-    spec_den, x_breaks = _new_more_spec()
-    M_den = np.asarray(spec_den.factors, dtype=float)  # len=6 for your x_breaks
-
-    # --- grids ---
-    P_grid = np.linspace(0.0, P_max_GW, 800)
-    x_grid = np.linspace(0.0, x_max, 800)
-
-    # --- compute total losses on both axes ---
-    # capacity-tier
-    T_cap_on_P, (Pbreak_cap, Mcap) = _capacity_tier_total_loss_on_capacity_axis(P_grid, spec_cap)
-    T_cap_on_x, (xbreak_cap, Mcap_x) = _capacity_tier_total_loss_on_density_axis(
-        x_grid, spec_cap, A_ref_km2=A_ref_km2
-    )
-
-    # density-tier
-    T_den_on_x, (xbreak_den, Mden_x) = _density_tier_total_loss_on_density_axis(x_grid, x_breaks, M_den)
-    T_den_on_P, (Pbreak_den, Mden_P) = _extend_density_total_loss_to_capacity_axis(
-        P_grid,
-        A_ref_km2=A_ref_km2,
-        x_breaks=x_breaks,
-        M_den=M_den,
-    )
-
-    # --- constants ---
-    loss_uniform = 1.0 - float(alpha_uniform)
-
-    # --- colors ---
-    blue = "#1f77b4"
-    red = "#d62728"
-    grey = "0.3"
-
-    # --- figure ---
-    fig, axes = plt.subplots(2, 2, figsize=(14, 7.5), dpi=dpi, sharey="row")
-    ax_TP, ax_Tx = axes[0, 0], axes[0, 1]
-    ax_MP, ax_Mx = axes[1, 0], axes[1, 1]
-
-    # -------------------------
-    # TOP: Total loss
-    # -------------------------
-    ax_TP.plot(P_grid, T_cap_on_P, color=blue, lw=2.5, label="Tiered capacity-based (total)")
-    ax_TP.plot(P_grid, T_den_on_P, color=red, lw=2.5, label="Tiered density-based (total)")
-    ax_TP.axhline(loss_uniform, color=grey, ls="--", lw=1.8, label="Uniform scaling correction (constant)")
-    ax_TP.axhline(0.0, color=grey, ls=":", lw=1.8, label="No-wake baseline")
-
-    ax_TP.set_title("Total loss vs installed capacity")
-    ax_TP.set_xlabel("Installed capacity, P (GW)")
-    ax_TP.set_ylabel("Loss (fraction)")
-
-    ax_Tx.plot(x_grid, T_cap_on_x, color=blue, lw=2.5, label="Tiered capacity-based (total)")
-    ax_Tx.plot(x_grid, T_den_on_x, color=red, lw=2.5, label="Tiered density-based (total)")
-    ax_Tx.axhline(loss_uniform, color=grey, ls="--", lw=1.8, label="Uniform scaling correction (constant)")
-    ax_Tx.axhline(0.0, color=grey, ls=":", lw=1.8, label="No-wake baseline")
-
-    ax_Tx.set_title("Total loss vs installed capacity density")
-    ax_Tx.set_xlabel("Installed capacity density, x (MW/km²)")
-
-    # Force axis limits (density MUST go to 4)
-    ax_TP.set_xlim(0.0, P_max_GW)
-    ax_Tx.set_xlim(0.0, x_max)
-    ax_MP.set_xlim(0.0, P_max_GW)
-    ax_Mx.set_xlim(0.0, x_max)
-    
-    # --- Log scale ONLY on density axis panels ---
-    for ax in (ax_Tx, ax_Mx):
-        ax.set_xscale("log")
-        ax.set_xlim(1e-3, x_max)  # avoid 0 on log-scale; keep max at 4
-        ax.set_xticks([1e-3, 1e-2, 1e-1, 0.25, 1.0, 2.5, 4.0])
-        ax.get_xaxis().set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:g}"))
-
-
-    # Secondary x-axes (equivalence for A_ref)
-    def P_to_x(Pgw): return (np.asarray(Pgw) * 1000.0) / float(A_ref_km2)
-    def x_to_P(xmwkm2): return (np.asarray(xmwkm2) * float(A_ref_km2)) / 1000.0
-
-
-    # Threshold markers (light verticals)
-    for pb in Pbreak_cap[1:]:
-        ax_TP.axvline(pb, color=blue, alpha=0.18, lw=1.5)
-    for pb in Pbreak_den[1:]:
-        ax_TP.axvline(pb, color=red, alpha=0.18, lw=1.5)
-
-    for xb in xbreak_cap[1:]:
-        ax_Tx.axvline(xb, color=blue, alpha=0.18, lw=1.5)
-    for xb in xbreak_den[1:]:
-        ax_Tx.axvline(xb, color=red, alpha=0.18, lw=1.5)
-
-    # -------------------------
-    # BOTTOM: Marginal loss (step) — ROBUST CONSTRUCTION
-    # -------------------------
-
-    # ---- Capacity-tier marginal vs P
-    # spec_cap max_caps are [2e3, 10e3, inf] MW; cumulative boundaries are [2,12] GW
-    P_bnds_cap = np.array([0.0, 2.0, 12.0], dtype=float)
-    P_bnds_cap = P_bnds_cap[P_bnds_cap < P_max_GW]
-    P_edges_cap = np.r_[P_bnds_cap, P_max_GW]
-
-    # Mcap should correspond to tiers; if helper already gives it, use it; else derive:
-    # expected marginal tiers length = len(P_edges_cap)-1
-    Mcap_plot = np.asarray(Mcap, dtype=float).copy()
-    # If helper returned more than needed, truncate; if fewer, pad with last
-    need = len(P_edges_cap) - 1
-    if len(Mcap_plot) >= need:
-        Mcap_plot = Mcap_plot[:need]
-    else:
-        Mcap_plot = np.r_[Mcap_plot, np.full(need - len(Mcap_plot), Mcap_plot[-1])]
-
-    y_cap = np.r_[Mcap_plot, Mcap_plot[-1]]  # y must match x length
-    ax_MP.step(P_edges_cap, y_cap, where="post", color=blue, lw=2.5, label="Tiered capacity-based (marginal)")
-
-    # ---- Density-tier marginal vs x  (domain is exactly 0..x_max)
-    x_edges_den = np.asarray(x_breaks, dtype=float)
-    # ensure ends at x_max (4.0)
-    if x_edges_den[-1] < x_max:
-        x_edges_den = np.r_[x_edges_den, x_max]
-    else:
-        x_edges_den[-1] = x_max
-
-    # M_den is per-interval (len = len(x_edges_den)-1 expected)
-    Mden_plot_x = np.asarray(M_den, dtype=float).copy()
-    need = len(x_edges_den) - 1
-    if len(Mden_plot_x) >= need:
-        Mden_plot_x = Mden_plot_x[:need]
-    else:
-        Mden_plot_x = np.r_[Mden_plot_x, np.full(need - len(Mden_plot_x), Mden_plot_x[-1])]
-
-    y_den_x = np.r_[Mden_plot_x, Mden_plot_x[-1]]  # y length = x length
-    ax_Mx.step(x_edges_den, y_den_x, where="post", color=red, lw=2.5, label="Tiered density-based (marginal)")
-
-    # ---- Density-tier marginal mapped to P with Option A extension
-    # map x edges -> P edges
-    P_edges_den_core = x_to_P(x_edges_den)  # GW
-    if P_edges_den_core[-1] < P_max_GW:
-        # Option A: extend beyond x_max by holding last marginal constant
-        P_edges_den = np.r_[P_edges_den_core, P_max_GW]
-        Mden_plot_P = np.r_[Mden_plot_x, Mden_plot_x[-1]]  # add one extra segment for extension
-    else:
-        P_edges_den = P_edges_den_core
-        Mden_plot_P = Mden_plot_x
-
-    y_den_P = np.r_[Mden_plot_P, Mden_plot_P[-1]]
-    ax_MP.step(P_edges_den, y_den_P, where="post", color=red, lw=2.5, label="Tiered density-based (marginal)")
-
-    # ---- Capacity-tier marginal mapped to x (for completeness on right-bottom)
-    # Map capacity boundaries to density: x = P*1000/Aref
-    x_edges_cap_core = P_to_x(P_edges_cap)
-    x_edges_cap_core = np.clip(x_edges_cap_core, 0.0, x_max)
-    # remove duplicates after clipping (important!)
-    x_edges_cap = np.unique(x_edges_cap_core)
-
-    # Determine which tiers apply up to x_max (given A_ref)
-    # For A_ref=1000 and x_max=4 => P=4GW, so only Tier1 (0-2GW) and Tier2 (2-4GW) appear.
-    # Use the first two marginal values from Mcap_plot.
-    if len(x_edges_cap) >= 2:
-        # build y to match x_edges_cap length
-        # intervals count = len(x_edges_cap)-1
-        nint = len(x_edges_cap) - 1
-        Mcap_x_plot = Mcap_plot[:max(1, min(len(Mcap_plot), nint))]
-        if len(Mcap_x_plot) < nint:
-            Mcap_x_plot = np.r_[Mcap_x_plot, np.full(nint - len(Mcap_x_plot), Mcap_x_plot[-1])]
-        y_cap_x = np.r_[Mcap_x_plot, Mcap_x_plot[-1]]
-        ax_Mx.step(x_edges_cap, y_cap_x, where="post", color=blue, lw=2.5, label="Tiered capacity-based (marginal)")
-
-    # Reference lines + labels for bottom panels
-    for ax in [ax_MP, ax_Mx]:
-        ax.axhline(loss_uniform, color=grey, ls="--", lw=1.8, label="Uniform scaling correction (constant)")
-        ax.axhline(0.0, color=grey, ls=":", lw=1.8, label="No-wake baseline")
-
-    ax_MP.set_title("Marginal loss (tier step) vs installed capacity")
-    ax_MP.set_xlabel("Installed capacity, P (GW)")
-    ax_MP.set_ylabel("Marginal loss, M(·) (fraction)")
-
-    ax_Mx.set_title("Marginal loss (tier step) vs installed capacity density")
-    ax_Mx.set_xlabel("Installed capacity density, x (MW/km²)")
-
-
-    # Formatting: percentage ticks + grid
-    for ax in [ax_TP, ax_Tx, ax_MP, ax_Mx]:
-        ax.yaxis.set_major_formatter(lambda v, pos: f"{100*v:.0f}%")
-        ax.grid(True, alpha=0.25)
-
-    # One clean legend for entire figure (bottom center)
-    handles, labels = ax_TP.get_legend_handles_labels()
-    # add bottom panel handles too (for the marginal labels)
-    h_b, l_b = ax_MP.get_legend_handles_labels()
-    handles += h_b
-    labels += l_b
-
-    seen = set()
-    h2, l2 = [], []
-    for h, l in zip(handles, labels):
-        if l not in seen:
-            seen.add(l)
-            h2.append(h)
-            l2.append(l)
-
-    fig.legend(h2, l2, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=[0, 0.05, 1, 1])
-
-    if savepath is not None:
-        fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
-    return fig
-
 
 
 def _step_xy(breaks: np.ndarray, M: np.ndarray, x_max: float) -> Tuple[np.ndarray, np.ndarray]:
@@ -1609,11 +1373,15 @@ def plot_wake_models_density_two_areas(
     # avoid 0 for log scale, but still show up to x_max
     x_grid = np.geomspace(1e-3, x_max, 1200)
 
+    _WAKE_COLORS = {
+        "base":     "#1F77B4",  # muted blue
+        "standard": "#D55E00",  # brick orange
+        "glaum":    "#882255",  # muted magenta
+        "new_more": "#4D4D4D",  # charcoal
+    }
     # constants
     loss_uniform = 1.0 - float(alpha_uniform)
-    blue = "#1f77b4"
-    red = "#d62728"
-    grey = "0.30"
+
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 7.5), dpi=dpi, sharey="row")
     ax_TL, ax_TR = axes[0, 0], axes[0, 1]
@@ -1628,10 +1396,10 @@ def plot_wake_models_density_two_areas(
             x_grid, x_breaks_den, M_den
         )
 
-        ax_T.plot(x_grid, T_cap_x, color=blue, lw=2.6, label="Tiered capacity-based (total)")
-        ax_T.plot(x_grid, T_den_x, color=red, lw=2.6, label="Tiered density-based (total)")
-        ax_T.axhline(loss_uniform, color=grey, ls="--", lw=1.8, label="Uniform scaling correction")
-        ax_T.axhline(0.0, color=grey, ls=":", lw=1.8, label="No-wake baseline")
+        ax_T.plot(x_grid, T_cap_x, color=_WAKE_COLORS["glaum"], lw=2.6, label="Tiered capacity (total)")
+        ax_T.plot(x_grid, T_den_x, color=_WAKE_COLORS["new_more"], lw=2.6, label="Tiered density (total)")
+        ax_T.axhline(loss_uniform, color=_WAKE_COLORS["standard"], ls="--", lw=1.8, label="Uniform scaling")
+        ax_T.axhline(0.0, color=_WAKE_COLORS["base"], ls=":", lw=1.8, label="No-wake baseline")
 
         # threshold markers
         for xb in np.asarray(x_breaks_cap, dtype=float)[1:]:
@@ -1642,7 +1410,7 @@ def plot_wake_models_density_two_areas(
                 ax_T.axvline(xb, color=red, alpha=0.18, lw=1.4)
 
         ax_T.set_title(f"Total loss vs density\n{col_title}")
-        ax_T.set_xlabel("Installed capacity density, x (MW/km²)")
+        ax_T.set_xlabel("Installed Capacity Density, [MW/km²]")
         ax_T.set_ylabel("Loss (fraction)")
 
         # --- MARGINAL LOSS (density axis) ---
@@ -1650,18 +1418,18 @@ def plot_wake_models_density_two_areas(
         x_edges_cap, y_cap = _step_xy(np.asarray(x_breaks_cap, float), np.asarray(M_cap, float), x_max=x_max)
         x_edges_den_step, y_den = _step_xy(np.asarray(x_breaks_den_arr, float), np.asarray(M_den_arr, float), x_max=x_max)
 
-        ax_M.step(x_edges_cap, y_cap, where="post", color=blue, lw=2.6, label="Tiered capacity-based (marginal)")
-        ax_M.step(x_edges_den_step, y_den, where="post", color=red, lw=2.6, label="Tiered density-based (marginal)")
-        ax_M.axhline(loss_uniform, color=grey, ls="--", lw=1.8, label="Uniform scaling correction")
-        ax_M.axhline(0.0, color=grey, ls=":", lw=1.8, label="No-wake baseline")
+        ax_M.step(x_edges_cap, y_cap, where="post", color=_WAKE_COLORS["glaum"], lw=2.6, label="Tiered capacity (marginal)")
+        ax_M.step(x_edges_den_step, y_den, where="post", color=_WAKE_COLORS["new_more"], lw=2.6, label="Tiered density (marginal)")
+        ax_M.axhline(loss_uniform, color=_WAKE_COLORS["standard"], ls="--", lw=1.8, label="Uniform scaling")
+        ax_M.axhline(0.0, color=_WAKE_COLORS["base"], ls=":", lw=1.8, label="No-wake")
 
         for xb in x_edges_cap[1:-1]:
-            ax_M.axvline(xb, color=blue, alpha=0.18, lw=1.4)
+            ax_M.axvline(xb, color=_WAKE_COLORS["glaum"], alpha=0.18, lw=1.4)
         for xb in x_edges_den_step[1:-1]:
-            ax_M.axvline(xb, color=red, alpha=0.18, lw=1.4)
+            ax_M.axvline(xb, color=_WAKE_COLORS["new_more"], alpha=0.18, lw=1.4)
 
         ax_M.set_title(f"Marginal loss (tier step) vs density\n{col_title}")
-        ax_M.set_xlabel("Installed capacity density, x (MW/km²)")
+        ax_M.set_xlabel("Installed Capacity Density, [MW/km²]")
         ax_M.set_ylabel("Marginal loss (fraction)")
 
         # --- formatting ---
