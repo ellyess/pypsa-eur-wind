@@ -77,7 +77,7 @@ def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
     if bias_corr:
         print("IS THIS WORKING??!?!?!?!? IF YOU SEE THIS THEN BIAS CORRECT TRUE")
         # wnd_spd.to_netcdf('bias-extra/atlite_ws_uncorrected.nc')
-        bias_fac = xr.open_dataset('bias-extra/alite_bias.nc')
+        bias_fac = xr.open_dataset('bias-extra/atlite_bias.nc')
         scalar = bias_fac.scalar.interp(
                     method='nearest',
                     x=wnd_spd.x.values, y=wnd_spd.y.values,

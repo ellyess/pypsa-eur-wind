@@ -1,0 +1,98 @@
+base-s100000-biasFalse:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s50000-biasFalse:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 50000
+        onshore_threshold: 50000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s10000-biasFalse:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s5000-biasFalse:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 5000
+        onshore_threshold: 5000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+
+base-s1000-biasFalse:
+    offshore_mods:
+        wake_model: base
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False

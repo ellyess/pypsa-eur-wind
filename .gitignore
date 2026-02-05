@@ -101,3 +101,6 @@ examples/Helsinki-Vantaa_2012.ipynb
 .DS_Store
 /images
 *.png
+/analysis_scripts/data
+/wake_extra-working
+/config/manuscript
