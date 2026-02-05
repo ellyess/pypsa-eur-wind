@@ -2,7 +2,7 @@ base-s100000-biasFalse:
     offshore_mods:
         wake_model: base
         offshore_threshold: 100000
-        onshore_threshold: False
+        onshore_threshold: 100000
     renewable:
         onwind:
             resource:
@@ -22,7 +22,7 @@ base-s50000-biasFalse:
     offshore_mods:
         wake_model: base
         offshore_threshold: 50000
-        onshore_threshold: False
+        onshore_threshold: 50000
     renewable:
         onwind:
             resource:
@@ -42,7 +42,7 @@ base-s10000-biasFalse:
     offshore_mods:
         wake_model: base
         offshore_threshold: 10000
-        onshore_threshold: False
+        onshore_threshold: 10000
     renewable:
         onwind:
             resource:
@@ -62,7 +62,7 @@ base-s5000-biasFalse:
     offshore_mods:
         wake_model: base
         offshore_threshold: 5000
-        onshore_threshold: False
+        onshore_threshold: 5000
     renewable:
         onwind:
             resource:
@@ -82,7 +82,7 @@ base-s1000-biasFalse:
     offshore_mods:
         wake_model: base
         offshore_threshold: 1000
-        onshore_threshold: False
+        onshore_threshold: 1000
     renewable:
         onwind:
             resource:
@@ -98,211 +98,111 @@ base-s1000-biasFalse:
                 bias_corr: False
 
 
-standard-s100000-biasFalse:
+base-s100000-biasTrue:
     offshore_mods:
-        wake_model: standard
+        wake_model: base
         offshore_threshold: 100000
-        onshore_threshold: False
+        onshore_threshold: 100000
     renewable:
         onwind:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-ac:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-dc:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-float:
             resource:
-                bias_corr: False
+                bias_corr: True
 
 
-standard-s50000-biasFalse:
+base-s50000-biasTrue:
     offshore_mods:
-        wake_model: standard
+        wake_model: base
         offshore_threshold: 50000
-        onshore_threshold: False
+        onshore_threshold: 50000
     renewable:
         onwind:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-ac:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-dc:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-float:
             resource:
-                bias_corr: False
+                bias_corr: True
 
 
-standard-s10000-biasFalse:
+base-s10000-biasTrue:
     offshore_mods:
-        wake_model: standard
+        wake_model: base
         offshore_threshold: 10000
-        onshore_threshold: False
+        onshore_threshold: 10000
     renewable:
         onwind:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-ac:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-dc:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-float:
             resource:
-                bias_corr: False
+                bias_corr: True
 
 
-standard-s5000-biasFalse:
+base-s5000-biasTrue:
     offshore_mods:
-        wake_model: standard
+        wake_model: base
         offshore_threshold: 5000
-        onshore_threshold: False
+        onshore_threshold: 5000
     renewable:
         onwind:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-ac:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-dc:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-float:
             resource:
-                bias_corr: False
+                bias_corr: True
 
 
-standard-s1000-biasFalse:
+base-s1000-biasTrue:
     offshore_mods:
-        wake_model: standard
+        wake_model: base
         offshore_threshold: 1000
-        onshore_threshold: False
+        onshore_threshold: 1000
     renewable:
         onwind:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-ac:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-dc:
             resource:
-                bias_corr: False
+                bias_corr: True
         offwind-float:
             resource:
-                bias_corr: False
-
-
-glaum-s100000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
-        offshore_threshold: 100000
-        onshore_threshold: False
-    renewable:
-        onwind:
-            resource:
-                bias_corr: False
-        offwind-ac:
-            resource:
-                bias_corr: False
-        offwind-dc:
-            resource:
-                bias_corr: False
-        offwind-float:
-            resource:
-                bias_corr: False
-
-
-glaum-s50000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
-        offshore_threshold: 50000
-        onshore_threshold: False
-    renewable:
-        onwind:
-            resource:
-                bias_corr: False
-        offwind-ac:
-            resource:
-                bias_corr: False
-        offwind-dc:
-            resource:
-                bias_corr: False
-        offwind-float:
-            resource:
-                bias_corr: False
-
-
-glaum-s10000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
-        offshore_threshold: 10000
-        onshore_threshold: False
-    renewable:
-        onwind:
-            resource:
-                bias_corr: False
-        offwind-ac:
-            resource:
-                bias_corr: False
-        offwind-dc:
-            resource:
-                bias_corr: False
-        offwind-float:
-            resource:
-                bias_corr: False
-
-
-glaum-s5000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
-        offshore_threshold: 5000
-        onshore_threshold: False
-    renewable:
-        onwind:
-            resource:
-                bias_corr: False
-        offwind-ac:
-            resource:
-                bias_corr: False
-        offwind-dc:
-            resource:
-                bias_corr: False
-        offwind-float:
-            resource:
-                bias_corr: False
-
-
-glaum-s1000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
-        offshore_threshold: 1000
-        onshore_threshold: False
-    renewable:
-        onwind:
-            resource:
-                bias_corr: False
-        offwind-ac:
-            resource:
-                bias_corr: False
-        offwind-dc:
-            resource:
-                bias_corr: False
-        offwind-float:
-            resource:
-                bias_corr: False
+                bias_corr: True
 
 
 new_more-s100000-biasFalse:
     offshore_mods:
         wake_model: new_more
         offshore_threshold: 100000
-        onshore_threshold: False
+        onshore_threshold: 100000
     renewable:
         onwind:
             resource:
@@ -322,7 +222,7 @@ new_more-s50000-biasFalse:
     offshore_mods:
         wake_model: new_more
         offshore_threshold: 50000
-        onshore_threshold: False
+        onshore_threshold: 50000
     renewable:
         onwind:
             resource:
@@ -342,7 +242,7 @@ new_more-s10000-biasFalse:
     offshore_mods:
         wake_model: new_more
         offshore_threshold: 10000
-        onshore_threshold: False
+        onshore_threshold: 10000
     renewable:
         onwind:
             resource:
@@ -362,7 +262,7 @@ new_more-s5000-biasFalse:
     offshore_mods:
         wake_model: new_more
         offshore_threshold: 5000
-        onshore_threshold: False
+        onshore_threshold: 5000
     renewable:
         onwind:
             resource:
@@ -382,7 +282,7 @@ new_more-s1000-biasFalse:
     offshore_mods:
         wake_model: new_more
         offshore_threshold: 1000
-        onshore_threshold: False
+        onshore_threshold: 1000
     renewable:
         onwind:
             resource:
@@ -396,3 +296,103 @@ new_more-s1000-biasFalse:
         offwind-float:
             resource:
                 bias_corr: False
+
+
+new_more-s100000-biasTrue:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-ac:
+            resource:
+                bias_corr: True
+        offwind-dc:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s50000-biasTrue:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 50000
+        onshore_threshold: 50000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-ac:
+            resource:
+                bias_corr: True
+        offwind-dc:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s10000-biasTrue:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 10000
+        onshore_threshold: 10000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-ac:
+            resource:
+                bias_corr: True
+        offwind-dc:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s5000-biasTrue:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 5000
+        onshore_threshold: 5000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-ac:
+            resource:
+                bias_corr: True
+        offwind-dc:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True
+
+
+new_more-s1000-biasTrue:
+    offshore_mods:
+        wake_model: new_more
+        offshore_threshold: 1000
+        onshore_threshold: 1000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: True
+        offwind-ac:
+            resource:
+                bias_corr: True
+        offwind-dc:
+            resource:
+                bias_corr: True
+        offwind-float:
+            resource:
+                bias_corr: True

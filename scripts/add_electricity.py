@@ -1192,16 +1192,16 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
     
-    # --- Fixed build-out injection (so wake correction sees reference p_nom) ---
-    if snakemake.config.get("fixed_offwind", {}).get("enable", False):
-        clusters = int(snakemake.wildcards.clusters)
-        ref_path = _reference_postnetwork_path(snakemake, clusters=clusters)
-        logger.info(f"Injecting reference offwind build-out from: {ref_path}")
-        apply_reference_offwind_buildout(
-            n,
-            ref_path,
-            carrier=snakemake.config["fixed_offwind"].get("carrier", "offwind-combined"),
-        )
+    # # --- Fixed build-out injection (so wake correction sees reference p_nom) ---
+    # if snakemake.config.get("fixed_offwind", {}).get("enable", False):
+    #     clusters = int(snakemake.wildcards.clusters)
+    #     ref_path = _reference_postnetwork_path(snakemake, clusters=clusters)
+    #     logger.info(f"Injecting reference offwind build-out from: {ref_path}")
+    #     apply_reference_offwind_buildout(
+    #         n,
+    #         ref_path,
+    #         carrier=snakemake.config["fixed_offwind"].get("carrier", "offwind-combined"),
+    #     )
     
     # 2) Apply wake effects
     wake_model = mods.get("wake_model", "base")

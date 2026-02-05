@@ -123,19 +123,36 @@ def plot_map(
         inplace=True,
     )
 
-    # drop non-bus
-    to_drop = costs.index.levels[0].symmetric_difference(n.buses.index)
-    if len(to_drop) != 0:
-        logger.info(f"Dropping non-buses {to_drop.tolist()}")
-        costs.drop(to_drop, level=0, inplace=True, axis=0, errors="ignore")
+    # --- sector-coupling safe guard: costs may be empty after filtering ---
+    if costs.empty:
+        logger.warning(
+            "No bus-level costs remain after filtering; skipping cost-based bus sizing."
+        )
+        costs = None
+        carriers = []
+    else:
+        # drop non-bus
+        to_drop = costs.index.levels[0].symmetric_difference(n.buses.index)
+        if len(to_drop) != 0:
+            logger.info(f"Dropping non-buses {to_drop.tolist()}")
+            costs.drop(to_drop, level=0, inplace=True, axis=0, errors="ignore")
 
-    # make sure they are removed from index
-    costs.index = pd.MultiIndex.from_tuples(costs.index.values)
+        # if everything got dropped, bail out cleanly
+        if costs.empty:
+            logger.warning(
+                "All costs were removed when aligning to AC buses; skipping cost-based bus sizing."
+            )
+            costs = None
+            carriers = []
+        else:
+            # make sure they are removed from index
+            if not isinstance(costs.index, pd.MultiIndex):
+                costs.index = pd.MultiIndex.from_tuples(costs.index.values)
 
-    threshold = 100e6  # 100 mEUR/a
-    carriers = costs.groupby(level=1).sum()
-    carriers = carriers.where(carriers > threshold).dropna()
-    carriers = list(carriers.index)
+            threshold = 100e6  # 100 mEUR/a
+            carriers = costs.groupby(level=1).sum()
+            carriers = carriers.where(carriers > threshold).dropna()
+            carriers = list(carriers.index)
 
     # PDF has minimum width, so set these to zero
     line_lower_threshold = 500.0
@@ -174,7 +191,7 @@ def plot_map(
     fig.set_size_inches(7, 6)
 
     n.plot(
-        bus_sizes=costs / bus_size_factor,
+        bus_sizes=None if costs is None else costs / bus_size_factor,
         bus_colors=tech_colors,
         line_colors=ac_color,
         link_colors=dc_color,
