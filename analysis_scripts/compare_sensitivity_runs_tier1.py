@@ -606,4 +606,11 @@ if __name__ == "__main__":
 # python compare_sensitivity_runs_sector_styled.py \
 #   --results-root results \
 #   --glob "thesis-sensitivity-2030-10-northsea-dominant-6h/**/postnetworks/*.nc" \
-#   --outdir plots/sensitivity/sector
+#   --outdir plots/sensitivity/tier1
+
+# python compare_sensitivity_runs_sector_styled.py \
+#   --results-root ../results \
+#   --glob "thesis-sensitivity-2030-30-europe-dominant-6h/**/postnetworks/*.nc" \
+#   --outdir ../plots/sensitivity/tier2 \
+#   --coarse 1000000 \
+#   --fine 10000
