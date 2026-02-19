@@ -8,8 +8,22 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pypsa
 
-from plotting_style import thesis_plot_style
+from plotting_style import thesis_plot_style, format_axes_standard
 from thesis_colors import label, THESIS_LABELS, THESIS_COLORS
+
+from network_utils import (
+    snapshot_weights as snap_weights,
+    get_objective as objective,
+    bus_country,
+    capacity_by_carrier,
+    energy_by_carrier_twh,
+    cf_timeseries_per_gen as cf_timeseries,
+)
+
+try:
+    import xarray as xr
+except ImportError:
+    xr = None
 
 # Apply thesis-wide plotting style
 _style = thesis_plot_style()
@@ -39,7 +53,7 @@ NICE_NAMES = {
     "bias_off": "Baseline",
     "bias_uniform": "Uniform",
     "bias_on": "PyVWF",
-    
+
 }
 
 
@@ -49,62 +63,8 @@ def nice(x: str) -> str:
 
 
 # -----------------------------
-# Basics
-# -----------------------------
-def snap_weights(n: pypsa.Network) -> pd.Series:
-    if hasattr(n, "snapshot_weightings") and "generators" in n.snapshot_weightings.columns:
-        w = n.snapshot_weightings["generators"]
-    else:
-        w = pd.Series(1.0, index=n.snapshots)
-    return w.reindex(n.snapshots).fillna(1.0)
-
-
-def objective(n: pypsa.Network) -> float:
-    return float(getattr(n, "objective", np.nan))
-
-
-def bus_country(bus_name: str) -> str:
-    # PyPSA-Eur buses typically start with ISO2 e.g. "GB0 0", "DE0 0", ...
-    s = str(bus_name)
-    return s[:2] if len(s) >= 2 else "??"
-
-
-# -----------------------------
 # Aggregations
 # -----------------------------
-def capacity_by_carrier(n: pypsa.Network) -> pd.Series:
-    parts = []
-
-    if len(n.generators):
-        p_nom = n.generators.p_nom_opt if "p_nom_opt" in n.generators else n.generators.p_nom
-        parts.append(p_nom.groupby(n.generators.carrier).sum())
-
-    if len(n.storage_units):
-        p_nom = n.storage_units.p_nom_opt if "p_nom_opt" in n.storage_units else n.storage_units.p_nom
-        parts.append(p_nom.groupby(n.storage_units.carrier).sum())
-
-    if len(n.links):
-        p_nom = n.links.p_nom_opt if "p_nom_opt" in n.links else n.links.p_nom
-        parts.append(p_nom.groupby(n.links.carrier).sum())
-
-    if not parts:
-        return pd.Series(dtype=float, name="capacity_MW")
-
-    s = pd.concat(parts).groupby(level=0).sum()
-    s.name = "capacity_MW"
-    return s.sort_values(ascending=False)
-
-
-def energy_by_carrier_twh(n: pypsa.Network) -> pd.Series:
-    if not hasattr(n, "generators_t") or not hasattr(n.generators_t, "p") or n.generators_t.p.empty:
-        return pd.Series(dtype=float, name="energy_TWh")
-
-    w = snap_weights(n)
-    mwh = (n.generators_t.p.mul(w, axis=0)).sum(axis=0)
-    twh = mwh.groupby(n.generators.carrier).sum() / 1e6
-    twh.name = "energy_TWh"
-    return twh.sort_values(ascending=False)
-
 
 def wind_breakdown_by_country(
     n: pypsa.Network,
@@ -166,40 +126,6 @@ def align_multi(series_by_run: dict[str, pd.Series], baseline: str = "bias_off")
 # -----------------------------
 # CF distributions
 # -----------------------------
-def cf_timeseries(
-    n: pypsa.Network,
-    carriers: tuple[str, ...],
-    *,
-    kind: str = "availability",  # "availability" or "dispatch"
-) -> pd.DataFrame:
-    """
-    Return CF time series for selected carriers.
-      availability: p_max_pu
-      dispatch: p / p_nom
-    """
-    gens = n.generators
-    mask = gens.carrier.isin(carriers)
-    if not mask.any():
-        return pd.DataFrame(index=n.snapshots)
-
-    idx = gens.index[mask]
-
-    if kind == "availability":
-        if not hasattr(n.generators_t, "p_max_pu") or n.generators_t.p_max_pu.empty:
-            return pd.DataFrame(index=n.snapshots)
-        cf = n.generators_t.p_max_pu[idx].copy()
-        return cf
-
-    if kind == "dispatch":
-        if not hasattr(n.generators_t, "p") or n.generators_t.p.empty:
-            return pd.DataFrame(index=n.snapshots)
-        p = n.generators_t.p[idx]
-        p_nom = (gens.loc[idx].p_nom_opt if "p_nom_opt" in gens.loc[idx] else gens.loc[idx].p_nom).astype(float)
-        cf = p.div(p_nom, axis=1)
-        return cf
-
-    raise ValueError(f"Unknown kind={kind!r}")
-
 
 def _weighted_sample_values(
     cf: pd.DataFrame,
@@ -323,9 +249,10 @@ def plot_cdf_and_delta(
     plt.xlabel("Capacity factor")
     plt.ylabel("CDF")
     plt.title(f"{label} CF distribution ({kind})")
-    plt.legend(frameon=False)
+    plt.legend(loc='best', frameon=False)
     plt.tight_layout()
-    plt.savefig(out_cdf, dpi=300)
+    format_axes_standard(plt.gcf())
+    plt.savefig(out_cdf, dpi=300, bbox_inches="tight")
     plt.close()
 
     # Delta CDF plot on common x-grid
@@ -344,9 +271,10 @@ def plot_cdf_and_delta(
     plt.xlabel("Capacity factor")
     plt.ylabel("ΔCDF")
     plt.title(f"{label} ΔCDF ({kind})")
-    plt.legend(frameon=False)
+    plt.legend(loc='best', frameon=False)
     plt.tight_layout()
-    plt.savefig(out_delta, dpi=300)
+    format_axes_standard(plt.gcf())
+    plt.savefig(out_delta, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -498,9 +426,10 @@ def plot_grouped_deltas(
     plt.xticks(x, plot_index, rotation=45, ha="right")
     plt.title(title)
     plt.ylabel(ylabel)
-    plt.legend(frameon=False)
+    plt.legend(loc='best', frameon=False)
     plt.tight_layout()
-    plt.savefig(outpath, dpi=300)
+    format_axes_standard(plt.gcf())
+    plt.savefig(outpath, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -508,6 +437,155 @@ def apply_nice_index(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out.index = [nice(str(i)) for i in out.index]
     return out
+
+
+def plot_system_cost_bar(
+    n0: pypsa.Network,
+    n1: pypsa.Network,
+    n2: pypsa.Network | None,
+    *,
+    outpath: Path,
+) -> None:
+    """Bar chart of system cost across bias correction scenarios."""
+    costs = {"Baseline": objective(n0), "PyVWF": objective(n1)}
+    if n2 is not None:
+        costs["Uniform"] = objective(n2)
+
+    labels_list = list(costs.keys())
+    values = [v / 1e9 for v in costs.values()]  # EUR -> B EUR
+    color_map = {"Baseline": THESIS_COLORS.get("base"), "PyVWF": THESIS_COLORS.get("bias"), "Uniform": THESIS_COLORS.get("standard")}
+    colors = [color_map.get(l, "#999999") for l in labels_list]
+
+    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    x = np.arange(len(labels_list))
+    bars = ax.bar(x, values, color=colors, edgecolor="black", linewidth=0.6)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels_list)
+    ax.set_ylabel(r"System cost [B€]")
+
+    # Add delta annotations relative to baseline
+    base_cost = values[0]
+    for i, (lbl, v) in enumerate(zip(labels_list, values)):
+        if i == 0:
+            continue
+        delta_pct = 100 * (v - base_cost) / abs(base_cost) if base_cost != 0 else 0
+        sign = "+" if delta_pct >= 0 else ""
+        ax.text(i, v + 0.002 * abs(base_cost), f"{sign}{delta_pct:.2f}%",
+               ha="center", va="bottom", fontsize=7)
+
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_duration_curve(
+    n0: pypsa.Network,
+    n1: pypsa.Network,
+    n2: pypsa.Network | None,
+    *,
+    carriers: tuple[str, ...],
+    label_text: str,
+    outpath: Path,
+) -> None:
+    """Wind output duration curve (sorted dispatch) for each bias scenario."""
+    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+
+    for n, name, color_key in [
+        (n0, "Baseline", "base"),
+        (n1, "PyVWF", "bias"),
+        (n2, "Uniform", "standard"),
+    ]:
+        if n is None:
+            continue
+        mask = n.generators.carrier.isin(carriers)
+        if not mask.any():
+            continue
+        idx = n.generators.index[mask]
+        if not hasattr(n.generators_t, "p") or n.generators_t.p.empty:
+            continue
+        total_gw = n.generators_t.p[idx].sum(axis=1) / 1e3  # MW -> GW
+        sorted_gw = total_gw.sort_values(ascending=False).values
+        hours = np.arange(1, len(sorted_gw) + 1)
+        ax.plot(hours, sorted_gw, linewidth=1.2, label=name,
+               color=THESIS_COLORS.get(color_key))
+
+    ax.set_xlabel("Hours")
+    ax.set_ylabel(f"{label_text} output [GW]")
+    ax.legend(loc="best", frameon=False)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_bias_correction_map(
+    bias_path: str | Path,
+    *,
+    outpath: Path,
+) -> None:
+    """Plot spatial maps of the bias correction scalar and offset fields."""
+    if xr is None:
+        print("[WARN] xarray not available; skipping bias correction map.")
+        return
+
+    bias_path = Path(bias_path)
+    if not bias_path.exists():
+        print(f"[WARN] Bias correction file not found: {bias_path}")
+        return
+
+    ds = xr.open_dataset(bias_path)
+
+    has_scalar = "scalar" in ds.data_vars
+    has_offset = "offset" in ds.data_vars
+    n_panels = int(has_scalar) + int(has_offset)
+    if n_panels == 0:
+        print("[WARN] Bias correction file has neither 'scalar' nor 'offset' variable.")
+        return
+
+    fig, axes = plt.subplots(1, n_panels, figsize=(5.2 * n_panels, 4.0), dpi=300)
+    if n_panels == 1:
+        axes = [axes]
+
+    panel_idx = 0
+    if has_scalar:
+        ax = axes[panel_idx]
+        scalar = ds["scalar"].squeeze()
+        if scalar.ndim == 2:
+            im = ax.pcolormesh(scalar.x, scalar.y, scalar.values, cmap="RdBu_r",
+                              vmin=0.85, vmax=1.15, shading="auto")
+        else:
+            im = ax.scatter(scalar.x, scalar.y, c=scalar.values, cmap="RdBu_r",
+                          vmin=0.85, vmax=1.15, s=2)
+        fig.colorbar(im, ax=ax, shrink=0.8, label="Scalar [-]")
+        ax.set_title("Bias correction: scalar")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        ax.set_aspect("equal")
+        panel_idx += 1
+
+    if has_offset:
+        ax = axes[panel_idx]
+        offset = ds["offset"].squeeze()
+        vlim = float(np.nanmax(np.abs(offset.values))) if np.any(np.isfinite(offset.values)) else 1.0
+        if offset.ndim == 2:
+            im = ax.pcolormesh(offset.x, offset.y, offset.values, cmap="RdBu_r",
+                              vmin=-vlim, vmax=vlim, shading="auto")
+        else:
+            im = ax.scatter(offset.x, offset.y, c=offset.values, cmap="RdBu_r",
+                          vmin=-vlim, vmax=vlim, s=2)
+        fig.colorbar(im, ax=ax, shrink=0.8, label="Offset [m/s]")
+        ax.set_title("Bias correction: offset")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        ax.set_aspect("equal")
+
+    ds.close()
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 # -----------------------------
@@ -524,6 +602,7 @@ def main():
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--cf-max-assets", type=int, default=4000, help="Max generators sampled for CF distributions/quantiles (per group).")
     ap.add_argument("--cf-weight-scale", type=int, default=10, help="Snapshot weight scaling for CF sampling (higher = smoother CDF, slower).")
+    ap.add_argument("--bias-file", default=None, help="Path to atlite_bias.nc for map plot (auto-detected if omitted).")
     args = ap.parse_args()
 
     outdir = Path(args.out)
@@ -708,6 +787,28 @@ def main():
         "bias_on_name": nice("bias_on"),
     }])
     summary.to_csv(outdir / "summary.csv", index=False)
+
+    # --- New plots ---
+    # System cost bar chart
+    plot_system_cost_bar(n0, n1, n2, outpath=outdir / "system_cost_bar.png")
+
+    # Duration curves: offshore and onshore
+    plot_duration_curve(n0, n1, n2, carriers=offshore_carriers, label_text="Offshore wind", outpath=outdir / "duration_curve_offshore.png")
+    plot_duration_curve(n0, n1, n2, carriers=onshore_carriers, label_text="Onshore wind", outpath=outdir / "duration_curve_onshore.png")
+    # Combined wind
+    all_wind_carriers = onshore_carriers + offshore_carriers
+    plot_duration_curve(n0, n1, n2, carriers=all_wind_carriers, label_text="Total wind", outpath=outdir / "duration_curve_total_wind.png")
+
+    # Bias correction spatial map
+    if args.bias_file and Path(args.bias_file).exists():
+        plot_bias_correction_map(args.bias_file, outpath=outdir / "bias_correction_map.png")
+    else:
+        for bias_file in ["bias-extra/atlite_bias.nc", "../bias-extra/atlite_bias.nc", "data/atlite_bias.nc"]:
+            if Path(bias_file).exists():
+                plot_bias_correction_map(bias_file, outpath=outdir / "bias_correction_map.png")
+                break
+        else:
+            print("[INFO] No bias correction netCDF found; skipping spatial map.")
 
     print("Wrote outputs to:", outdir)
     print(summary.T)

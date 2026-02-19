@@ -265,6 +265,12 @@ def plot_balances():
     balances["energy"] = [i for i in balances_df.index.levels[0] if i not in co2_carriers]
 
     for k, v in balances.items():
+        if not v:
+            fig, ax = plt.subplots(figsize=(12, 8))
+            ax.set_title(f"No data for {k}")
+            fig.savefig(snakemake.output.balances[:-10] + k + ".svg", bbox_inches="tight")
+            plt.close(fig)
+            continue
         df = balances_df.loc[v]
         df = df.groupby(df.index.get_level_values(2)).sum()
 
@@ -297,6 +303,10 @@ def plot_balances():
         df = df.drop(to_drop)
 
         if df.empty:
+            fig, ax = plt.subplots(figsize=(12, 8))
+            ax.set_title(f"No data for {k}")
+            fig.savefig(snakemake.output.balances[:-10] + k + ".svg", bbox_inches="tight")
+            plt.close(fig)
             continue
 
         new_index = preferred_order.intersection(df.index).append(df.index.difference(preferred_order))

@@ -36,7 +36,7 @@ from typing import Iterable, Dict, List, Tuple, Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from plotting_style import thesis_plot_style, apply_spatial_resolution_axis
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
 from thesis_colors import SCENARIO_COLORS, get_color_cycle
 
 # Apply thesis-wide plotting style
@@ -46,6 +46,11 @@ import seaborn as sns
 
 import geopandas as gpd
 import pypsa
+
+from network_utils import (
+    snapshot_weights as get_snapshot_weights,
+    select_generators_by_carrier,
+)
 
 # ---- Thesis plotting settings (thesis + consistent with wake/bias figures) ----
 cm = 1 / 2.54
@@ -114,25 +119,6 @@ def new_fig_ax(fig_w_cm=14, fig_h_cm=8):
         constrained_layout=True,
     )
     return fig, ax
-
-def add_resolution_markers(ax, xvals):
-    """Add coarse/fine markers. Note: x-axis is inverted (fine on the right)."""
-    x_min = float(np.nanmin(xvals))
-    x_max = float(np.nanmax(xvals))
-
-    ax.axvline(x_min, linestyle="--", linewidth=0.8, color="grey", alpha=0.7)
-    ax.axvline(x_max, linestyle="--", linewidth=0.8, color="grey", alpha=0.7)
-
-    y0, y1 = ax.get_ylim()
-    y = y1 - 0.02 * (y1 - y0)
-
-    ax.text(x_min, y, "Fine", ha="right", va="top")
-    ax.text(x_max, y, "Coarse", ha="left", va="top")
-
-
-    # ytop = ax.get_ylim()[1]
-    # ax.text(min(xvals), ytop, "Fine", ha="left", va="top", fontsize=8)
-    # ax.text(max(xvals), ytop, "Coarse", ha="right", va="top", fontsize=8)
 
 def weighted_quantile(values: np.ndarray, quantiles: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """
@@ -220,30 +206,13 @@ class WindStats:
     wind_market_value: float  # EUR/MWh (if prices exist)
     price_dispersion: float   # std of mean nodal prices (if exists)
     line_volume: float        # sum length*capacity (if exists)
+    objective: float          # system cost / objective value (EUR)
+    trans_expansion: float    # transmission expansion proxy (MW-km)
 
 
 # -----------------------------
 # Core calculations
 # -----------------------------
-
-def get_snapshot_weights(n: pypsa.Network) -> pd.Series:
-    """
-    Use snapshot_weightings.generators if present; otherwise all ones.
-    """
-    if hasattr(n, "snapshot_weightings") and "generators" in n.snapshot_weightings.columns:
-        w = n.snapshot_weightings["generators"]
-        w = w.reindex(n.snapshots)
-        w = w.fillna(1.0)
-        return w
-    return pd.Series(1.0, index=n.snapshots)
-
-
-def select_generators_by_carrier(n: pypsa.Network, carriers: Iterable[str]) -> pd.Index:
-    carriers = set(carriers)
-    if n.generators.empty:
-        return pd.Index([])
-    return n.generators.index[n.generators.carrier.isin(carriers)]
-
 
 def built_capacity_gw(n: pypsa.Network, gens: pd.Index) -> pd.Series:
     if len(gens) == 0:
@@ -395,6 +364,24 @@ def compute_stats_for_network(
     mv = wind_market_value_eur_per_mwh(n, wind_gens)
     pdsp = price_dispersion(n)
     lv = line_volume(n)
+    obj = float(getattr(n, "objective", np.nan))
+
+    # Transmission expansion (delta line volume from initial)
+    trans_exp = 0.0
+    if hasattr(n, "lines") and not n.lines.empty and "s_nom_opt" in n.lines.columns:
+        ln = n.lines
+        base_s = ln.get("s_nom", pd.Series(0.0, index=ln.index)).fillna(0.0)
+        opt_s = ln["s_nom_opt"].fillna(base_s)
+        delta_s = (opt_s - base_s).clip(lower=0.0)
+        length_s = ln.get("length", pd.Series(0.0, index=ln.index)).fillna(0.0)
+        trans_exp += float((delta_s * length_s).sum())
+    if hasattr(n, "links") and not n.links.empty and "p_nom_opt" in n.links.columns:
+        lk = n.links
+        base_p = lk.get("p_nom", pd.Series(0.0, index=lk.index)).fillna(0.0)
+        opt_p = lk["p_nom_opt"].fillna(base_p)
+        delta_p = (opt_p - base_p).clip(lower=0.0)
+        length_p = lk.get("length", pd.Series(0.0, index=lk.index)).fillna(0.0)
+        trans_exp += float((delta_p * length_p).sum())
 
     return WindStats(
         amax=amax,
@@ -412,6 +399,8 @@ def compute_stats_for_network(
         wind_market_value=float(mv),
         price_dispersion=float(pdsp),
         line_volume=float(lv),
+        objective=float(obj),
+        trans_expansion=float(trans_exp),
     )
 # -----------------------------
 # Plotting
@@ -477,6 +466,7 @@ def plot_region_splits(
 
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    format_axes_standard(fig)
     fig.savefig(out, bbox_inches="tight", pil_kwargs={"compress_level": 1})
     plt.close(fig)
 
@@ -591,14 +581,15 @@ def main():
     ax.plot(df["amax"], df["total_wind_gw"], marker="o", label="Total wind")
     ax.plot(df["amax"], df["onwind_gw"], marker="o", label="Onshore wind")
     ax.plot(df["amax"], df["offwind_gw"], marker="o", label="Offshore wind")
-    apply_spatial_resolution_axis(ax)
+    apply_spatial_resolution_axis(ax, annotate=False)
     ax.set_ylabel("Built wind capacity [GW]")
     ax.grid(True, which="both", alpha=0.3)
     add_resolution_markers(ax, df['amax'].values)
     sns.despine(ax=ax)
-    ax.legend(frameon=False)
+    ax.legend(loc='best', frameon=False)
     fig.tight_layout()
-    fig.savefig(args.out_dir / "wind_capacity_vs_amax.png", dpi=300)
+    format_axes_standard(fig)
+    fig.savefig(args.out_dir / "wind_capacity_vs_amax.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     # --- Plot 2: CF median + IQR
@@ -612,10 +603,11 @@ def main():
         ylabel="Built-capacity-weighted CF [-]",
         title="Wind CF distribution (weighted by built capacity)",
     )
-    apply_spatial_resolution_axis(ax)
+    apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, df['amax'].values)
     fig.tight_layout()
-    fig.savefig(args.out_dir / "wind_cf_iqr_vs_amax.png", dpi=300)
+    format_axes_standard(fig)
+    fig.savefig(args.out_dir / "wind_cf_iqr_vs_amax.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     # --- Plot 3: Curtailment median + IQR
@@ -629,47 +621,96 @@ def main():
         ylabel="Built-capacity-weighted curtailment [-]",
         title="Wind curtailment distribution (weighted by built capacity)",
     )
-    apply_spatial_resolution_axis(ax)
+    apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, df['amax'].values)
     fig.tight_layout()
-    fig.savefig(args.out_dir / "wind_curtailment_iqr_vs_amax.png", dpi=300)
+    format_axes_standard(fig)
+    fig.savefig(args.out_dir / "wind_curtailment_iqr_vs_amax.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     # --- Optional: market value / line volume / price dispersion
     if df["wind_market_value"].notna().any():
         fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
         ax.plot(df["amax"], df["wind_market_value"], marker="o")
-        apply_spatial_resolution_axis(ax)
+        apply_spatial_resolution_axis(ax, annotate=False)
         ax.set_ylabel("Wind market value [EUR/MWh]")
         ax.grid(True, which="both", alpha=0.3)
         add_resolution_markers(ax, df['amax'].values)
         sns.despine(ax=ax)
         fig.tight_layout()
-        fig.savefig(args.out_dir / "wind_market_value_vs_amax.png", dpi=300)
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "wind_market_value_vs_amax.png", dpi=300, bbox_inches="tight")
         plt.close(fig)
 
     if df["line_volume"].notna().any():
         fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
         ax.plot(df["amax"], df["line_volume"], marker="o")
-        apply_spatial_resolution_axis(ax)
+        apply_spatial_resolution_axis(ax, annotate=False)
         ax.set_ylabel("Line volume proxy [MW-km]")
         ax.grid(True, which="both", alpha=0.3)
         add_resolution_markers(ax, df['amax'].values)
         sns.despine(ax=ax)
         fig.tight_layout()
-        fig.savefig(args.out_dir / "line_volume_vs_amax.png", dpi=300)
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "line_volume_vs_amax.png", dpi=300, bbox_inches="tight")
         plt.close(fig)
 
     if df["price_dispersion"].notna().any():
         fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
         ax.plot(df["amax"], df["price_dispersion"], marker="o")
-        apply_spatial_resolution_axis(ax)
+        apply_spatial_resolution_axis(ax, annotate=False)
         ax.set_ylabel("Price dispersion (std of mean nodal prices) [EUR/MWh]")
         ax.grid(True, which="both", alpha=0.3)
         add_resolution_markers(ax, df['amax'].values)
         sns.despine(ax=ax)
         fig.tight_layout()
-        fig.savefig(args.out_dir / "price_dispersion_vs_amax.png", dpi=300)
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "price_dispersion_vs_amax.png", dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: System cost vs Amax ---
+    if df["objective"].notna().any():
+        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
+        obj_bn = df["objective"] / 1e9  # Convert EUR to billion EUR
+        ax.plot(df["amax"], obj_bn, marker="o", color=WAKE_COLORS["total"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel(r"System cost [B€]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "system_cost_vs_amax.png", dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: Transmission expansion vs Amax ---
+    if df["trans_expansion"].notna().any() and (df["trans_expansion"] > 0).any():
+        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
+        trans_twkm = df["trans_expansion"] / 1e6  # MW-km to TW-km
+        ax.plot(df["amax"], trans_twkm, marker="o", color=WAKE_COLORS["network"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel(r"Transmission expansion [TW$\cdot$km]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "transmission_expansion_vs_amax.png", dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: CF IQR width (dispersion metric) vs Amax ---
+    if df["cf_q75"].notna().any() and df["cf_q25"].notna().any():
+        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
+        iqr_width = df["cf_q75"] - df["cf_q25"]
+        ax.plot(df["amax"], iqr_width, marker="o", color=WAKE_COLORS["cf"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel("CF IQR width (Q75 - Q25) [-]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(args.out_dir / "cf_iqr_width_vs_amax.png", dpi=300, bbox_inches="tight")
         plt.close(fig)
     
     if args.plot_region_splits:
@@ -702,6 +743,7 @@ def main():
                 ax.set_title(f"CF distribution (built-weighted) — {row['run']}")
                 ax.grid(True, alpha=0.3)
                 fig.tight_layout()
+                format_axes_standard(fig)
                 fig.savefig(args.out_dir / f"hist_cf_{row['run']}.png", dpi=200)
                 plt.close(fig)
 
@@ -713,6 +755,7 @@ def main():
                 ax.set_title(f"Curtailment distribution (built-weighted) — {row['run']}")
                 ax.grid(True, alpha=0.3)
                 fig.tight_layout()
+                format_axes_standard(fig)
                 fig.savefig(args.out_dir / f"hist_curtail_{row['run']}.png", dpi=200)
                 plt.close(fig)
 
@@ -727,7 +770,7 @@ if __name__ == "__main__":
     
     
 # Example usage:
-# python compare_spatial_runs_styled.py \
+# python compare_spatial_runs.py \
 #   --results-dir results \
 #   --glob "thesis-spatial-2030-*/**/networks/*.nc" \
 #   --out-dir plots/spatial \

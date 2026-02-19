@@ -42,27 +42,7 @@ except ImportError:
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
-
-def find_scenario_dirs(results_dir: Path, scenarios: list[str], splits: list[int]) -> dict[tuple[str, int], Path]:
-    """
-    Find scenario directories matching pattern: {scenario}-s{split}-biasFalse/
-    
-    Returns:
-        dict mapping (scenario, split) tuple to directory path
-    """
-    scenario_dirs = {}
-    
-    for split in splits:
-        for scenario in scenarios:
-            pattern = f"{scenario}-s{split}-biasFalse"
-            candidate = results_dir / pattern
-            if candidate.exists():
-                scenario_dirs[(scenario, split)] = candidate
-                print(f"Found {scenario} (split={split}): {candidate.name}")
-            else:
-                print(f"Warning: {pattern} not found in {results_dir}")
-    
-    return scenario_dirs
+from network_utils import find_scenario_dirs
 
 
 def load_network(scenario_dir: Path) -> pypsa.Network | None:
@@ -73,8 +53,10 @@ def load_network(scenario_dir: Path) -> pypsa.Network | None:
     
     postnet_dir = scenario_dir / "postnetworks"
     if not postnet_dir.exists():
+        postnet_dir = scenario_dir / "networks"
+    if not postnet_dir.exists():
         return None
-    
+
     nc_files = list(postnet_dir.glob("*.nc"))
     if not nc_files:
         return None

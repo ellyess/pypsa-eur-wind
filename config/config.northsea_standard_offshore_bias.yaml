@@ -22,8 +22,8 @@ remote:
 run:
   prefix: "thesis-bias-2030-10-northsea-standard-6h"
   name:
-    # - base-s100000-biasFalse
-    # - base-s100000-biasTrue
+    - base-s100000-biasFalse
+    - base-s100000-biasTrue
     - base-s100000-biasUniform
   scenarios:
     enable: true

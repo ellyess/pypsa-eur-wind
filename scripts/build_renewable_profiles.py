@@ -172,12 +172,15 @@ if __name__ == "__main__":
         # keep your bias string stable for caching; None means "no bias suffix"
         bias = str(snakemake.params.renewable[technology]["resource"].get("bias_corr"))
 
+    correction_factor = params.get("correction_factor", 1.0)
+
     cache_path = profile_cache_path(
         wake_dir=wdir,
         clusters=clusters,
         technology=technology,
         threshold=threshold,
         bias=bias,
+        correction_factor=correction_factor,
     )
 
     # Check if file already exists
@@ -191,7 +194,6 @@ if __name__ == "__main__":
             models = {0: models}
         resource[tech] = models[next(iter(models))]
 
-        correction_factor = params.get("correction_factor", 1.0)
         capacity_per_sqkm = params["capacity_per_sqkm"]
 
         if correction_factor != 1.0:
