@@ -104,8 +104,6 @@ import numpy as np
 import pandas as pd
 import pypsa
 import xarray as xr
-from _helpers import configure_logging, set_scenario_config
-from base_network import append_bus_shapes
 from packaging.version import Version, parse
 from pypsa.clustering.spatial import (
     busmap_by_greedy_modularity,
@@ -115,8 +113,15 @@ from pypsa.clustering.spatial import (
 )
 from scipy.sparse.csgraph import connected_components
 
-from add_wind_functions import split_regions
-from pathlib import Path
+from _helpers import configure_logging, set_scenario_config
+
+from wake_helpers import (
+    get_offshore_mods,
+    get_threshold,
+    get_wake_dir,        # canonical name
+    regions_file,
+    split_regions,   # moved here (remove add_wind_functions import)
+)
 
 PD_GE_2_2 = parse(pd.__version__) >= Version("2.2")
 
@@ -421,40 +426,53 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     # nc.shapes = n.shapes.copy()
-    for which in ["regions_onshore", "regions_offshore"]:
-        
+    
     #################################################################################
     ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
     #################################################################################
+    mods = get_offshore_mods(snakemake.config)
+    wdir = get_wake_dir(mods)
+
+    for which in ["regions_onshore", "regions_offshore"]:
         regions = gpd.read_file(snakemake.input[which])
-        clustered_regions = cluster_regions((clustering.busmap,), regions)
-        
+        clustered = cluster_regions((clustering.busmap,), regions)
+
+        # Ensure CRS is defined before any reprojection
+        if clustered.crs is None:
+            clustered = clustered.set_crs(4326, allow_override=True)
+
+        tech = "offwind" if which == "regions_offshore" else "onwind"
+        threshold = get_threshold(mods, tech)  # Optional[int]
+
+        # Clip offshore clustered regions if configured
         if which == "regions_offshore":
-            
-            # defining if to clip the offshore regions to a specific area
-            sea_shape = snakemake.config["offshore_mods"].get("sea_shape")
-            if sea_shape is not None:
-                clustered_regions = clustered_regions.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
-            
-            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-            wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson"
-            my_file = Path(wake_extras)
-            
-            if not my_file.is_file():
-                meshed_regions = split_regions(clustered_regions,threshold)
-                meshed_regions.to_file(wake_extras)
-        
-        else:
-            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
-            wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson"
-            my_file = Path(wake_extras)
-            if not my_file.is_file():
-                meshed_regions = split_regions(clustered_regions,threshold)
-                meshed_regions.to_file(wake_extras)
-                
-        clustered_regions.to_file(snakemake.output[which])
-        # append_bus_shapes(nc, clustered_regions, type=which.split("_")[1])
-        
+            sea_shape = mods.get("sea_shape")
+            if sea_shape:
+                clustered = clustered.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
+
+        # Always write clustered regions to the rule outputs (clipped if offshore)
+        clustered.to_file(snakemake.output[which], driver="GeoJSON")
+
+        # Always write a cached regions file (split OR nosplit)
+        out_path = regions_file(wdir, tech, threshold)
+        if out_path is None:
+            raise ValueError(f"regions_file() returned None for tech={tech!r}")
+
+        if not out_path.is_file():
+            clustered_4326 = clustered.to_crs(4326)
+
+            if threshold is None:
+                # nosplit cache = clustered geometry
+                clustered_4326.to_file(out_path, driver="GeoJSON")
+            else:
+                # split cache
+                meshed = split_regions(clustered_4326, threshold_km2=threshold)
+                meshed.to_file(out_path, driver="GeoJSON")
+
+
+
+    #################################################################################
+    #################################################################################   
 
     nc.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     nc.export_to_netcdf(snakemake.output.network)

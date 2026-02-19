@@ -77,12 +77,17 @@ import logging
 import time
 
 import atlite
-import geopandas as gpd
 import numpy as np
 import xarray as xr
 from _helpers import configure_logging, set_scenario_config
 
-from pathlib import Path
+from wake_helpers import (
+    get_offshore_mods,
+    get_threshold,
+    get_wake_dir,
+    load_regions,
+    availability_cache_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,54 +108,44 @@ if __name__ == "__main__":
     technology = snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
+    #################################################################################
+    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
+    #################################################################################
     clusters = snakemake.wildcards.clusters
-    
-    if snakemake.wildcards.technology.startswith("onwind"):
-        threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
 
-    else:
-        threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-        
-    wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/availability_matrix_{clusters}_{technology}_{threshold}.nc"
-    # my_file = Path(wake_extras)
-    # wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/availability_matrix_{clusters}_{technology}_{threshold}.nc"
-    my_file = Path(wake_extras)
-    # my_file = Path(f"ellyess_extra/availability_matrix_{clusters}_{technology}_{threshold}.nc")
-    if my_file.is_file():
-        availability = xr.open_dataarray(my_file)
+    mods = get_offshore_mods(snakemake.config)
+    wdir = get_wake_dir(mods)
+
+    # Wind techs use onshore/offshore thresholds; for non-wind you can still call
+    # get_threshold only if you want wind-only caching. Most workflows do this only for wind.
+    threshold = get_threshold(mods, technology) if "wind" in technology else int(mods.get("onshore_threshold", 0))
+
+    cache_path = availability_cache_path(
+        wake_dir=wdir,
+        clusters=clusters,
+        technology=technology,
+        threshold=threshold,
+    )
+
+    if cache_path.is_file():
+        availability = xr.open_dataarray(cache_path)
     else:
         cutout = atlite.Cutout(snakemake.input.cutout)
-        
-        if snakemake.wildcards.technology.startswith("offwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-            # regions = gpd.read_file("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson")
-            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson")
-        elif snakemake.wildcards.technology.startswith("onwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
-            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson")
-        else:
-            regions = gpd.read_file(snakemake.input.regions)
-            
+
+        regions = load_regions(
+            technology=technology,
+            threshold=threshold,
+            wake_dir=wdir,
+            fallback_path=snakemake.input.regions,
+        )
+    #################################################################################
+    #################################################################################
+    
         assert not regions.empty, (
             f"List of regions in {snakemake.input.regions} is empty, please "
             "disable the corresponding renewable technology"
         )
-        
-        # if snakemake.wildcards.technology.startswith("offwind"):
-        #     # threshold = int(snakemake.wildcards.splits)
-        #     # regions_split = split_regions(regions,snakemake.wildcards.splits)
-        #     # regions_split["area"] = regions_split.geometry.to_crs(3035).area / 1e6
-        #     # regions_split.to_file(snakemake.output[0])
-        #     # max_area = int(snakemake.config["offshore_mods"].get("max_area"))
-        #     # meshed_regions = split_regions(clustered_regions,threshold,max_area)
-        #     # meshed_regions["area"] = meshed_regions.geometry.to_crs(3035).area / 1e6
-        #     # meshed_regions.to_file(snakemake.output["regions_offshore_split"])
-            
-        
-        #     threshold = int(snakemake.config["offshore_mods"].get("region_area_threshold"))
-        #     regions = gpd.read_file(resources("ellyess_extra/regions_offshore_s"+str(threshold)+".geojson"))
-            
-            
+
         # do not pull up, set_index does not work if geo dataframe is empty
         regions = regions.set_index("name").rename_axis("bus")
 
@@ -160,6 +155,8 @@ if __name__ == "__main__":
         if params["natura"]:
             excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
 
+        # added allow overlap true to prevent errors in case no overlap between
+        # excluder and cutout regions
         for dataset in ["corine", "luisa"]:
             kwargs = {"nodata": 0} if dataset == "luisa" else {}
             settings = params.get(dataset, {})
@@ -175,13 +172,13 @@ if __name__ == "__main__":
             if "grid_codes" in settings:
                 codes = settings["grid_codes"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, invert=True, crs=3035, **kwargs
+                    snakemake.input[dataset], codes=codes, invert=True, crs=3035, allow_no_overlap=True,**kwargs
                 )
             if settings.get("distance", 0.0) > 0.0:
                 codes = settings["distance_grid_codes"]
                 buffer = settings["distance"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, **kwargs
+                    snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, allow_no_overlap=True, **kwargs
                 )
 
         if params.get("ship_threshold"):
@@ -194,16 +191,24 @@ if __name__ == "__main__":
             )
 
         if params.get("max_depth"):
-            # lambda not supported for atlite + multiprocessing
-            # use named function np.greater with partially frozen argument instead
-            # and exclude areas where: -max_depth > grid cell depth
             func = functools.partial(np.greater, -params["max_depth"])
-            excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
+            excluder.add_raster(
+                snakemake.input.gebco,
+                codes=func,
+                crs=4326,
+                nodata=-1000,
+                allow_no_overlap=True,
+            )
 
         if params.get("min_depth"):
             func = functools.partial(np.greater, -params["min_depth"])
             excluder.add_raster(
-                snakemake.input.gebco, codes=func, crs=4326, nodata=-1000, invert=True
+                snakemake.input.gebco,
+                codes=func,
+                crs=4326,
+                nodata=-1000,
+                invert=True,
+                allow_no_overlap=True,
             )
 
         if "min_shore_distance" in params:
@@ -235,6 +240,6 @@ if __name__ == "__main__":
             )
             availability.loc[availability_MDUA.coords] = availability_MDUA
             
-        availability.to_netcdf(my_file)
+        availability.to_netcdf(cache_path)
 
     availability.to_netcdf(snakemake.output[0])
