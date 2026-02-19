@@ -4,8 +4,8 @@ Tier-2 plotting for thesis sensitivity (Europe-wide, sector-coupled)
 
 - Uses your plot_style.py + thesis_colors.py (consistent thesis styling)
 - Scans solved PyPSA networks from results/
-- Parses scenario from folder names like: <wakeprefix>-s<RES>-biasTrue/False
-- Tier-2 intent: reduced, confirmatory set (default: baseline vs bias+wake)
+- Parses scenario from folder names like: <wakeprefix>-s<RES>-biasTrue/False/Uniform
+- Tier-2 intent: reduced, confirmatory set (default: base, biasUniform, bias, wake, bias+wake)
 - Produces:
   1) onwind vs offwind capacity (GW) for selected resolutions (lines)
   2) transmission expansion (TW·km) for selected resolutions (lines)
@@ -26,7 +26,6 @@ python plot_tier2.py \
 from __future__ import annotations
 
 import argparse
-import re
 from pathlib import Path
 import warnings
 
@@ -36,280 +35,32 @@ import matplotlib.pyplot as plt
 
 import pypsa
 
-# ----------------------------
-# Thesis styling
-# ----------------------------
-# Your repo should provide these.
-# We keep defensive fallbacks so the script never hard-crashes.
-try:
-    import plotting_style as ps  # expected to define thesis_plot_style() + apply_spatial_resolution_axis()
-except Exception:  # pragma: no cover
-    ps = None
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
+from thesis_colors import THESIS_COLORS, THESIS_LABELS, label as get_label
 
-try:
-    import thesis_colors as tc  # expected to define THESIS_COLORS + label()
-except Exception:  # pragma: no cover
-    tc = None
-
-
-def apply_thesis_style():
-    if ps is not None and hasattr(ps, "thesis_plot_style"):
-        ps.thesis_plot_style()
-    else:
-        # Minimal sane defaults (will be overridden if your style exists)
-        plt.rcParams.update(
-            {
-                "figure.dpi": 300,
-                "savefig.dpi": 300,
-                "font.size": 9,
-                "axes.titlesize": 9,
-                "axes.labelsize": 9,
-                "legend.fontsize": 8,
-            }
-        )
+from network_utils import (
+    WAKE_ALIASES,
+    parse_from_path, build_manifest,
+    gen_idx, scenario_key, snapshot_weights,
+    wind_capacity_gw as capacity_gw_from_generators,
+    wind_curtailment_frac as curtailment_frac,
+    energy_twh_from_generators,
+    transmission_expansion_twkm, get_objective,
+    electrolyser_links, electrolyser_capacity_gw, h2_production_twh,
+    cf_timeseries_system as cf_timeseries,
+    load_network,
+)
 
 
 def get_color(key: str) -> str | None:
-    """Pull consistent colors from thesis_colors.py if present."""
-    if tc is not None and hasattr(tc, "THESIS_COLORS"):
-        d = tc.THESIS_COLORS
-        if isinstance(d, dict) and key in d:
-            return d[key]
-    return None
-
-
-def get_label(key: str) -> str:
-    """Pull consistent labels from thesis_colors.py if present."""
-    if tc is not None and hasattr(tc, "label"):
-        try:
-            return tc.label(key)
-        except Exception:
-            pass
-    return key
-
-
-# ----------------------------
-# Scenario parsing
-# ----------------------------
-_RE_SCENARIO = re.compile(r"(?P<wakeprefix>[^/]+)-s(?P<res>\d+)-bias(?P<bias>True|False)", re.IGNORECASE)
-
-WAKE_ALIASES = {
-    "base": "off",
-    "standard": "off",
-    "no_wake": "off",
-    "wakeoff": "off",
-    "off": "off",
-    # density-based wake
-    "new_more": "density",
-    "density": "density",
-    "density_based": "density",
-    "density-based": "density",
-}
-
-
-def scenario_key(bias: bool, wake: str) -> str:
-    wake_is_off = (wake == "off")
-    if (not bias) and wake_is_off:
-        return "base"
-    if bias and wake_is_off:
-        return "bias"
-    if (not bias) and (not wake_is_off):
-        return "wake"
-    return "bias+wake"
-
-
-def parse_from_path(nc_path: Path) -> dict:
-    # Find parent folder with "-sNNN-biasX"
-    scenario_folder = None
-    for p in reversed(nc_path.parts):
-        if "-s" in p and "bias" in p:
-            scenario_folder = p
-            break
-    if scenario_folder is None:
-        raise ValueError(f"Could not find scenario folder in path: {nc_path}")
-
-    m = _RE_SCENARIO.search(scenario_folder)
-    if not m:
-        raise ValueError(f"Scenario folder didn't match pattern: {scenario_folder}")
-
-    wakeprefix = m.group("wakeprefix")
-    res = int(m.group("res"))
-    bias = m.group("bias").lower() == "true"
-    wake = WAKE_ALIASES.get(wakeprefix.lower(), wakeprefix.lower())
-
-    return {
-        "path": str(nc_path),
-        "resolution": res,
-        "bias": bias,
-        "wake": wake,
-        "wakeprefix": wakeprefix,
-        "scenario_folder": scenario_folder,
-    }
-
-
-def build_manifest(results_root: Path, pattern: str) -> pd.DataFrame:
-    files = sorted(results_root.glob(pattern))
-    if not files:
-        raise SystemExit(f"No networks found under {results_root} with pattern {pattern!r}")
-    recs = [parse_from_path(p) for p in files]
-    df = pd.DataFrame(recs)
-    return df
-
-
-# ----------------------------
-# Tech selection + metrics
-# ----------------------------
-def gen_idx(n: pypsa.Network, tech: str) -> pd.Index:
-    carr = n.generators.carrier.astype(str).str.lower()
-    if tech == "offwind":
-        return n.generators.index[carr.str.contains("offwind")]
-    if tech == "onwind":
-        return n.generators.index[carr.eq("onwind")]
-    raise ValueError(tech)
-
-
-def capacity_gw_from_generators(n: pypsa.Network, tech: str) -> float:
-    idx = gen_idx(n, tech)
-    if len(idx) == 0:
-        return 0.0
-    g = n.generators.loc[idx]
-
-    p_nom_opt = g["p_nom_opt"] if "p_nom_opt" in g.columns else pd.Series(index=g.index, dtype=float)
-    p_nom = g["p_nom"] if "p_nom" in g.columns else pd.Series(index=g.index, dtype=float)
-
-    cap_mw = p_nom_opt.where(p_nom_opt.notna(), p_nom).fillna(0.0).sum()
-    return float(cap_mw) / 1e3
-
-
-def curtailment_frac(n: pypsa.Network, tech: str) -> float:
-    idx = gen_idx(n, tech)
-    if len(idx) == 0:
-        return float("nan")
-    try:
-        p = n.generators_t.p[idx]
-        p_max_pu = n.generators_t.p_max_pu[idx]
-    except Exception:
-        return float("nan")
-
-    g = n.generators.loc[idx]
-    if "p_nom_opt" in g.columns and g["p_nom_opt"].notna().any():
-        p_nom = g["p_nom_opt"].fillna(g.get("p_nom", 0.0))
-    else:
-        p_nom = g.get("p_nom", 0.0)
-
-    denom = float(p_nom.sum())
-    if denom <= 0:
-        return float("nan")
-
-    potential = p_max_pu.multiply(p_nom, axis=1)
-    curtailed = (potential - p).clip(lower=0.0).sum().sum()
-    pot = potential.sum().sum()
-    return float(curtailed / pot) if pot > 0 else float("nan")
-
-
-def snapshot_weights(n: pypsa.Network) -> pd.Series:
-    # PyPSA-Eur commonly uses snapshot_weightings["generators"]
-    if hasattr(n, "snapshot_weightings") and isinstance(n.snapshot_weightings, pd.DataFrame):
-        if "generators" in n.snapshot_weightings.columns:
-            return n.snapshot_weightings["generators"]
-    # fallback: assume 1 hour per snapshot
-    return pd.Series(1.0, index=n.snapshots)
-
-
-def energy_twh_from_generators(n: pypsa.Network, tech: str) -> float:
-    idx = gen_idx(n, tech)
-    if len(idx) == 0:
-        return 0.0
-    try:
-        p = n.generators_t.p[idx].sum(axis=1)  # MW
-    except Exception:
-        return 0.0
-    w = snapshot_weights(n)
-    mwh = float((p * w).sum())
-    return mwh / 1e6  # TWh
-
-
-def transmission_expansion_twkm(n: pypsa.Network) -> float:
-    total_mw_km = 0.0
-    if hasattr(n, "lines") and not n.lines.empty and "s_nom_opt" in n.lines.columns:
-        ln = n.lines
-        base = ln.get("s_nom", pd.Series(0.0, index=ln.index)).fillna(0.0)
-        opt = ln["s_nom_opt"].fillna(base)
-        delta = (opt - base).clip(lower=0.0)
-        length = ln.get("length", pd.Series(0.0, index=ln.index)).fillna(0.0)
-        total_mw_km += float((delta * length).sum())
-
-    if hasattr(n, "links") and not n.links.empty and "p_nom_opt" in n.links.columns:
-        lk = n.links
-        base = lk.get("p_nom", pd.Series(0.0, index=lk.index)).fillna(0.0)
-        opt = lk["p_nom_opt"].fillna(base)
-        delta = (opt - base).clip(lower=0.0)
-        length = lk.get("length", pd.Series(0.0, index=lk.index)).fillna(0.0)
-        total_mw_km += float((delta * length).sum())
-
-    return total_mw_km / 1e6  # TW·km
-
-
-def get_objective(n: pypsa.Network) -> float:
-    if hasattr(n, "objective") and n.objective is not None:
-        try:
-            return float(n.objective)
-        except Exception:
-            pass
-    return float("nan")
-
-
-# --- sector coupling lens: electrolysers / H2 production (robust heuristics) ---
-_ELEC_KEYWORDS = ("electroly", "electrolysis", "h2 electro", "pem", "alkaline")
-
-def electrolyser_links(n: pypsa.Network) -> pd.Index:
-    if not hasattr(n, "links") or n.links.empty:
-        return pd.Index([])
-    carr = n.links.carrier.astype(str).str.lower()
-    mask = np.zeros(len(carr), dtype=bool)
-    for k in _ELEC_KEYWORDS:
-        mask |= carr.str.contains(k)
-    return n.links.index[mask]
-
-def electrolyser_capacity_gw(n: pypsa.Network) -> float:
-    idx = electrolyser_links(n)
-    if len(idx) == 0:
-        return 0.0
-    lk = n.links.loc[idx]
-    if "p_nom_opt" in lk.columns and lk["p_nom_opt"].notna().any():
-        cap_mw = lk["p_nom_opt"].fillna(lk.get("p_nom", 0.0)).sum()
-    else:
-        cap_mw = lk.get("p_nom", pd.Series(0.0, index=lk.index)).sum()
-    return float(cap_mw) / 1e3
-
-def h2_production_twh(n: pypsa.Network) -> float:
-    """
-    Heuristic: use link power on the output side if present.
-    Many PyPSA-Eur sector models put electricity on bus0 and hydrogen on bus1.
-    We'll compute energy on p1 (MW) if available; otherwise p0 with sign flip.
-    """
-    idx = electrolyser_links(n)
-    if len(idx) == 0:
-        return 0.0
-    w = snapshot_weights(n)
-
-    try:
-        if hasattr(n.links_t, "p1"):
-            p = n.links_t.p1[idx].sum(axis=1)  # MW (H2 out, often positive)
-        else:
-            p = -n.links_t.p0[idx].sum(axis=1)  # MW (elec in negative), flip to "production"
-    except Exception:
-        return 0.0
-
-    mwh = float((p * w).sum())
-    return mwh / 1e6
+    return THESIS_COLORS.get(key)
 
 
 def compute_metrics(manifest: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for _, r in manifest.iterrows():
-        n = pypsa.Network(r["path"])
-        scen = scenario_key(bool(r["bias"]), str(r["wake"]))
+        n = load_network(r["path"])
+        scen = scenario_key(r["bias"], str(r["wake"]))
 
         rows.append(
             {
@@ -339,7 +90,7 @@ def compute_metrics(manifest: pd.DataFrame) -> pd.DataFrame:
 # Plotting
 # ----------------------------
 def _scenario_order(compare: list[str] | None) -> list[str]:
-    base_order = ["base", "bias", "wake", "bias+wake"]
+    base_order = ["base", "biasUniform", "bias", "wake", "bias+wake"]
     if compare:
         # keep user-specified order, but ensure valid
         return [s for s in compare if s in base_order]
@@ -356,17 +107,15 @@ def plot_lines_by_resolution(df: pd.DataFrame, ycol: str, ylabel: str, outpath: 
         c = get_color(scen)
         ax.plot(res, dd[ycol].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
 
-    if ps is not None and hasattr(ps, "apply_spatial_resolution_axis"):
-        ps.apply_spatial_resolution_axis(ax)
-    else:
-        ax.set_xscale("log")
-        ax.set_xlabel("Spatial resolution (log)")
+    apply_spatial_resolution_axis(ax, annotate=False)
+    add_resolution_markers(ax, res)
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=9)
     ax.grid(True, alpha=0.3)
-    ax.legend(frameon=False, fontsize=8)
+    ax.legend(loc='best', frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(outpath)
+    format_axes_standard(fig)
+    fig.savefig(outpath, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -382,18 +131,16 @@ def plot_capacity_on_off(df: pd.DataFrame, outpath: Path, compare: list[str]):
             dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
             c = get_color(scen)
             ax.plot(res, dd[col].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
-        if ps is not None and hasattr(ps, "apply_spatial_resolution_axis"):
-            ps.apply_spatial_resolution_axis(ax)
-        else:
-            ax.set_xscale("log")
-            ax.set_xlabel("Spatial resolution (log)")
+        apply_spatial_resolution_axis(ax, annotate=False)
+        add_resolution_markers(ax, res)
         ax.set_title(get_label(tech), fontsize=9)
         ax.set_ylabel("Capacity (GW)")
         ax.grid(True, alpha=0.3)
 
-    axes[1].legend(frameon=False, fontsize=8)
+    axes[1].legend(loc='best', frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(outpath)
+    format_axes_standard(fig)
+    fig.savefig(outpath, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -410,49 +157,20 @@ def plot_sector_coupling(df: pd.DataFrame, outpath: Path, compare: list[str]):
             dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
             c = get_color(scen)
             ax.plot(res, dd[col].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
-        if ps is not None and hasattr(ps, "apply_spatial_resolution_axis"):
-            ps.apply_spatial_resolution_axis(ax)
-        else:
-            ax.set_xscale("log")
-            ax.set_xlabel("Spatial resolution (log)")
+        apply_spatial_resolution_axis(ax, annotate=False)
+        add_resolution_markers(ax, res)
         ax.set_title(title, fontsize=9)
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
 
-    axes[1].legend(frameon=False, fontsize=8)
+    axes[1].legend(loc='best', frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig(outpath)
+    format_axes_standard(fig)
+    fig.savefig(outpath, bbox_inches="tight")
     plt.close(fig)
 
 
 # --- ECDF for CF distributions (robust + thesis-friendly) ---
-def cf_timeseries(n: pypsa.Network, tech: str) -> pd.DataFrame | None:
-    idx = gen_idx(n, tech)
-    if len(idx) == 0:
-        return None
-
-    g = n.generators.loc[idx]
-    if "p_nom_opt" in g.columns and g["p_nom_opt"].notna().any():
-        p_nom = g["p_nom_opt"].fillna(g.get("p_nom", 0.0))
-    else:
-        p_nom = g.get("p_nom", 0.0)
-    denom = float(p_nom.sum())
-    if denom <= 0:
-        return None
-
-    try:
-        p = n.generators_t.p[idx]
-        p_max_pu = n.generators_t.p_max_pu[idx]
-    except Exception:
-        return None
-
-    potential = p_max_pu.multiply(p_nom, axis=1)
-    avail_cf = potential.sum(axis=1) / denom
-    disp_cf = p.sum(axis=1) / denom
-    curt_cf = (potential.sum(axis=1) - p.sum(axis=1)).clip(lower=0.0) / denom
-
-    return pd.DataFrame({"avail_cf": avail_cf, "disp_cf": disp_cf, "curt_cf": curt_cf})
-
 
 def build_cf_long_both(manifest: pd.DataFrame, resolutions: tuple[int, ...], compare: list[str]) -> pd.DataFrame:
     rows = []
@@ -461,11 +179,11 @@ def build_cf_long_both(manifest: pd.DataFrame, resolutions: tuple[int, ...], com
         if res not in set(resolutions):
             continue
 
-        scen = scenario_key(bool(r.bias), str(r.wake))
+        scen = scenario_key(r.bias, str(r.wake))
         if scen not in compare:
             continue
 
-        n = pypsa.Network(r.path)
+        n = load_network(r.path)
         for tech in ["onwind", "offwind"]:
             ts = cf_timeseries(n, tech)
             if ts is None or ts.empty:
@@ -523,10 +241,62 @@ def plot_cf_ecdf_2x2(cf_long: pd.DataFrame, outpath: Path, metric: str, ylabel: 
             ax.grid(True, alpha=0.3)
 
     axes[1, 0].set_xlabel(ylabel)
-    axes[1, -1].legend(frameon=False, fontsize=8, loc="lower right")
+    axes[1, -1].legend(loc='best', frameon=False, fontsize=8)
     fig.suptitle(f"{ylabel} ECDFs (Tier 2)", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    fig.savefig(outpath)
+    format_axes_standard(fig)
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_europe_vs_northsea_panel(
+    tier2_metrics: pd.DataFrame,
+    tier1_csv: Path | None,
+    metric: str,
+    ylabel: str,
+    outpath: Path,
+    compare: list[str],
+    title: str = "",
+) -> None:
+    """Side-by-side panel: same metric from Tier 1 (North Sea) and Tier 2 (Europe).
+
+    Shows generalizability of findings across domains.
+    """
+    has_tier1 = tier1_csv is not None and tier1_csv.exists()
+    ncols = 2 if has_tier1 else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(4.4 * ncols, 3.2), dpi=300, sharey=True)
+    if ncols == 1:
+        axes = [axes]
+
+    def _plot_on_ax(ax, df, panel_title):
+        res = sorted(df["resolution"].unique())
+        for scen in compare:
+            dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
+            c = get_color(scen)
+            ax.plot(res, dd[metric].values, marker="o", linewidth=1.4,
+                   label=get_label(scen), color=c)
+        apply_spatial_resolution_axis(ax, annotate=False)
+        add_resolution_markers(ax, res)
+        ax.set_title(panel_title, fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+    # Panel 1: Tier 2 (Europe)
+    _plot_on_ax(axes[0], tier2_metrics, "Europe (Tier 2)")
+    axes[0].set_ylabel(ylabel)
+
+    # Panel 2: Tier 1 (North Sea) if available
+    if has_tier1:
+        tier1 = pd.read_csv(tier1_csv)
+        # Filter to matching scenarios
+        tier1 = tier1[tier1["scenario"].isin(compare)]
+        _plot_on_ax(axes[1], tier1, "North Sea (Tier 1)")
+
+    axes[-1].legend(loc="best", frameon=False, fontsize=7)
+    if title:
+        fig.suptitle(title, fontsize=9)
+    fig.tight_layout(rect=[0, 0, 1, 0.95] if title else [0, 0, 1, 1])
+    format_axes_standard(fig)
+    fig.savefig(outpath, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -534,7 +304,7 @@ def plot_cf_ecdf_2x2(cf_long: pd.DataFrame, outpath: Path, metric: str, ylabel: 
 # Main
 # ----------------------------
 def main():
-    apply_thesis_style()
+    thesis_plot_style()
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--results-root", default="results")
@@ -542,7 +312,17 @@ def main():
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--write-manifest", action="store_true")
     ap.add_argument("--resolutions", nargs="+", type=int, default=[1000000, 10000], help="Subset for Tier-2 plots")
-    ap.add_argument("--compare", nargs="+", default=["base", "bias+wake"], help="Scenarios to compare (ordered)")
+    ap.add_argument(
+        "--compare",
+        nargs="+",
+        default=["base", "biasUniform", "bias", "wake", "bias+wake"],
+        help="Scenarios to compare (ordered)",
+    )
+    ap.add_argument(
+        "--tier1-metrics",
+        default=None,
+        help="Path to Tier 1 metrics CSV for Europe vs North Sea comparison panels",
+    )
     args = ap.parse_args()
 
     outdir = Path(args.outdir)
@@ -555,7 +335,7 @@ def main():
     manifest = manifest[manifest["resolution"].isin(res_sel)].copy()
 
     # Normalise scenario labels
-    manifest["scenario"] = manifest.apply(lambda r: scenario_key(bool(r["bias"]), str(r["wake"])), axis=1)
+    manifest["scenario"] = manifest.apply(lambda r: scenario_key(r["bias"], str(r["wake"])), axis=1)
 
     compare = _scenario_order(args.compare)
     manifest = manifest[manifest["scenario"].isin(compare)].copy()
@@ -605,6 +385,20 @@ def main():
         metric="curt_cf", ylabel="Curtailment CF",
         resolutions=res_sel, compare=compare
     )
+
+    # Europe vs North Sea comparison panels
+    tier1_csv = Path(args.tier1_metrics) if args.tier1_metrics else None
+    for metric, ylabel, fname, title in [
+        ("offwind_cap_gw", "Offshore capacity (GW)", "fig_europe_vs_northsea_offwind_cap.png", "Offshore wind capacity: domain comparison"),
+        ("objective", "System objective (EUR)", "fig_europe_vs_northsea_objective.png", "System cost: domain comparison"),
+        ("trans_exp_twkm", "Transmission expansion (TW*km)", "fig_europe_vs_northsea_trans.png", "Transmission expansion: domain comparison"),
+        ("offwind_curt_frac", "Offshore curtailment (fraction)", "fig_europe_vs_northsea_curt.png", "Offshore curtailment: domain comparison"),
+    ]:
+        if metric in metrics.columns:
+            plot_europe_vs_northsea_panel(
+                metrics, tier1_csv, metric=metric, ylabel=ylabel,
+                outpath=outdir / fname, compare=compare, title=title,
+            )
 
     print(f"[OK] Wrote Tier-2 outputs to: {outdir}")
     print(f"[OK] Metrics: {outdir / 'tier2_metrics.csv'}")

@@ -22,26 +22,31 @@ remote:
 run:
   prefix: "thesis-sensitivity-2030-10-northsea-dominant-6h"
   name:
-  - base-s100000-biasFalse
-  - base-s50000-biasFalse
-  - base-s10000-biasFalse
-  - base-s5000-biasFalse
-  - base-s1000-biasFalse
-  - base-s100000-biasTrue
-  - base-s50000-biasTrue
-  - base-s10000-biasTrue
-  - base-s5000-biasTrue
-  - base-s1000-biasTrue
-  - new_more-s100000-biasFalse
-  - new_more-s50000-biasFalse
-  - new_more-s10000-biasFalse
-  - new_more-s5000-biasFalse
-  - new_more-s1000-biasFalse
-  - new_more-s100000-biasTrue
-  - new_more-s50000-biasTrue
-  - new_more-s10000-biasTrue
-  - new_more-s5000-biasTrue
-  - new_more-s1000-biasTrue
+  # - base-s100000-biasFalse
+  # # - base-s50000-biasFalse
+  # - base-s10000-biasFalse
+  # # - base-s5000-biasFalse
+  # - base-s1000-biasFalse
+  # - base-s100000-biasTrue
+  # # - base-s50000-biasTrue
+  # - base-s10000-biasTrue
+  # # - base-s5000-biasTrue
+  # - base-s1000-biasTrue
+  # - new_more-s100000-biasFalse
+  # # - new_more-s50000-biasFalse
+  # - new_more-s10000-biasFalse
+  # # - new_more-s5000-biasFalse
+  # - new_more-s1000-biasFalse
+  # - new_more-s100000-biasTrue
+  # # - new_more-s50000-biasTrue
+  # - new_more-s10000-biasTrue
+  # # - new_more-s5000-biasTrue
+  # - new_more-s1000-biasTrue
+  - base-s100000-biasUniform
+  # - base-s50000-biasFalse
+  - base-s10000-biasUniform
+  # - base-s5000-biasFalse
+  - base-s1000-biasUniform
   scenarios:
     enable: true
     file: config/scenarios-sensitivity.yaml

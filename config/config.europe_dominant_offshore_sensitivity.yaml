@@ -22,14 +22,16 @@ remote:
 run:
   prefix: "thesis-sensitivity-2030-30-europe-dominant-6h"
   name:
-  - base-s1000000-biasFalse
-  - base-s10000-biasFalse
-  - base-s1000000-biasTrue
-  - base-s10000-biasTrue
-  - new_more-s1000000-biasFalse
-  - new_more-s10000-biasFalse
-  - new_more-s1000000-biasTrue
-  - new_more-s10000-biasTrue
+  # - base-s1000000-biasFalse
+  # - base-s10000-biasFalse
+  # - base-s1000000-biasTrue
+  # - base-s10000-biasTrue
+  # - new_more-s1000000-biasFalse
+  # - new_more-s10000-biasFalse
+  # - new_more-s1000000-biasTrue
+  # - new_more-s10000-biasTrue
+  - base-s1000000-biasUniform
+  - base-s10000-biasUniform
   scenarios:
     enable: true
     file: config/scenarios-sensitivity-europe.yaml

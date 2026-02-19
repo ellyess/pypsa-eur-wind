@@ -129,6 +129,7 @@ from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_unif
 
 from scripts.wake_helpers import (
     get_offshore_mods,
+    get_wake_coefficients,
     add_wake_generators,
     drop_non_dominant_offwind_generators,
 )
@@ -1207,10 +1208,12 @@ if __name__ == "__main__":
     wake_model = mods.get("wake_model", "base")
 
     if wake_model == "standard":
-        # Simple multiplicative derating (legacy / baseline)
+        # Simple multiplicative derating
+        coeffs = get_wake_coefficients(mods, "standard")
+        derate = coeffs.get("derate_factor", 0.8855)
         offwind_idx = n.generators.filter(like="offwind", axis=0).index
         if len(offwind_idx):
-            n.generators_t.p_max_pu.loc[:, offwind_idx] *= 0.8855
+            n.generators_t.p_max_pu.loc[:, offwind_idx] *= derate
 
     elif wake_model in {"new_more", "glaum"}:
         # Full wake modelling (region-aware, split generators)

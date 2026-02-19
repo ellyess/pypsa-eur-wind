@@ -40,7 +40,7 @@ THESIS_LABELS = {
 WAKE_KEYS = ["base", "standard", "glaum", "new_more"]
 WAKE_ORDER = ["base", "standard", "glaum", "new_more"]  # Baseline, Uniform, Tiered-capacity, Tiered-density
 BIAS_KEYS = ["biasFalse", "biasUniform", "biasTrue"]
-SCENARIO_KEYS = ["base", "standard", "bias", "wake", "bias+wake"]
+SCENARIO_KEYS = ["base", "standard", "biasUniform", "bias", "wake", "bias+wake"]
 
 # ---------- Aliases (backwards compatibility) ----------
 # Map legacy keys -> canonical keys (or keep them identical).
@@ -78,6 +78,7 @@ THESIS_COLORS = {
     "standard": "#D55E00",    # muted orange (Okabe–Ito)
 
     # --- Single corrections ---
+    "biasUniform": "#D55E00",  # same as uniform reference
     "bias": "#5DAE8B",        # muted green (PyVWF)
     "wake": "#2F4B7C",        # muted blue (wake physics)
 
@@ -86,10 +87,10 @@ THESIS_COLORS = {
 }
 
 WAKE_MODEL_COLORS = {
-    "base":     THESIS_COLORS["base"],
-    "standard": "#6B8EC1",  # light blue (baseline wake)
-    "glaum":    "#4C72B0",  # medium blue
-    "new_more": "#2F4B7C",  # dark blue (most advanced)
+    "base":     THESIS_COLORS["base"],  # charcoal
+    "standard": "#D55E00",  # vermillion (Okabe-Ito)
+    "glaum":    "#0072B2",  # blue (Okabe-Ito)
+    "new_more": "#009E73",  # bluish green (Okabe-Ito)
 }
 
 

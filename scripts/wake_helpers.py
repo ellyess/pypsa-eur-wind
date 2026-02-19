@@ -1,6 +1,7 @@
 # scripts/wake_helpers.py
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union, Any, Mapping
@@ -9,9 +10,9 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-from scipy.spatial import Voronoi
-from shapely.geometry import MultiPolygon, Point, Polygon
-from shapely.prepared import prep
+_logger = logging.getLogger(__name__)
+
+from shapely.geometry import MultiPolygon, Polygon
 from sklearn.cluster import KMeans
 
 
@@ -138,16 +139,19 @@ def profile_cache_path(
     technology: str,
     threshold: Optional[int],
     bias: Optional[str] = None,
+    correction_factor: Optional[float] = None,
 ) -> Path:
     """Return cache path for renewable profiles.
 
     Naming:
-        profile_<clusters>_<technology>_<threshold|nosplit>[_bias<bias>].nc
+        profile_<clusters>_<technology>_<threshold|nosplit>[_bias<bias>][_cf<factor>].nc
     """
     cache_root = wake_dir / "renewable_profiles"
     cache_root.mkdir(parents=True, exist_ok=True)
     thr = _threshold_token(threshold)
     suffix = f"_bias{bias}" if bias is not None else ""
+    if correction_factor is not None and correction_factor != 1.0:
+        suffix += f"_cf{correction_factor}"
     return cache_root / f"profile_{clusters}_{technology}_{thr}{suffix}.nc"
 
 
@@ -205,7 +209,13 @@ def load_regions(
     if p.is_file():
         return gpd.read_file(p)
 
-    # If cache doesn't exist yet, fall back (or raise if you want strict behavior)
+    # Cache miss -- warn so the user knows split regions were not used
+    _logger.warning(
+        "Split-region cache not found at %s; falling back to unsplit "
+        "regions from %s. Run region splitting first if splitting "
+        "is intended for threshold=%s.",
+        p, fallback_path, threshold,
+    )
     return gpd.read_file(fallback_path)
 
 
@@ -281,37 +291,87 @@ class WakeSplitSpec:
     max_caps: List[float]         # length = n_segments (last can be np.inf)
 
 
-def _new_more_spec() -> Tuple[WakeSplitSpec, List[float]]:
+# ---------------------------------------------------------------------------
+# Default wake coefficients (used when config omits wake_coefficients section)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_STANDARD_COEFFS: dict = {
+    "derate_factor": 0.8855,
+}
+
+_DEFAULT_GLAUM_COEFFS: dict = {
+    "global_derate": 0.906,
+    "f2": 0.1279732,
+    "f3_extra": 0.13902848,
+    "max_caps": [2e3, 10e3],
+}
+
+_DEFAULT_NEW_MORE_COEFFS: dict = {
+    "alpha": 7.3,
+    "beta": 0.05,
+    "gamma": -0.7,
+    "delta": -14.6,
+    "breakpoints": [0, 0.0370257, 0.826982, 1.51092, 2.29324, 3.17241, 4],
+    # "breakpoints": [0, 0.025, 0.05, 0.25, 1, 2.5, 4],
+}
+
+
+def get_wake_coefficients(mods: dict, method: str) -> dict:
+    """Return wake coefficients for *method*, merging any config overrides
+    from ``offshore_mods.wake_coefficients.<method>`` with built-in defaults.
+
+    If the config has no ``wake_coefficients`` section, all defaults are used.
+    """
+    defaults = {
+        "standard": _DEFAULT_STANDARD_COEFFS,
+        "glaum": _DEFAULT_GLAUM_COEFFS,
+        "new_more": _DEFAULT_NEW_MORE_COEFFS,
+    }
+    base = dict(defaults.get(method, {}))
+    overrides = mods.get("wake_coefficients", {}).get(method, {})
+    base.update(overrides)
+    return base
+
+
+def _new_more_spec(coeffs: Optional[dict] = None) -> Tuple[WakeSplitSpec, List[float]]:
     """
     Density-tier spec (for the 'new_more' wake method) in MW/km^2 breakpoints (x), and marginal losses per tier.
     Returns:
         (spec, x_breaks) where x_breaks length = n_tiers+1
     """
+    if coeffs is None:
+        coeffs = _DEFAULT_NEW_MORE_COEFFS
+
+    _alpha = coeffs["alpha"]
+    _beta = coeffs["beta"]
+    _gamma = coeffs["gamma"]
+    _delta = coeffs["delta"]
+
     def y(x: float) -> float:
-        alpha = 7.3
-        beta = 0.05
-        gamma = -0.7
-        delta = -14.6
-        return alpha * np.exp(-x / beta) + gamma * x + delta  # percent total loss
+        return _alpha * np.exp(-x / _beta) + _gamma * x + _delta  # percent total loss
 
     def piecewise(x0: float, x1: float) -> float:
         # average marginal over [x0,x1] for T(x) * x relationship
         return (y(x1) * x1 - y(x0) * x0) / (x1 - x0)
 
-    x = [0, 0.025, 0.05, 0.25, 1, 2.5, 4]  # MW/km^2 breakpoints
+    x = list(coeffs["breakpoints"])
     # Convert to marginal loss fractions (positive)
     factors = [-(piecewise(x[i], x[i + 1])) / 100.0 for i in range(len(x) - 1)]
     return WakeSplitSpec(factors=factors, max_caps=[]), x
 
 
-def _glaum_spec() -> WakeSplitSpec:
+def _glaum_spec(coeffs: Optional[dict] = None) -> WakeSplitSpec:
     """Capacity-tier spec in MW thresholds. Return segment definition for the 'glaum' wake method (after global derate)."""
-    f2 = 0.1279732
-    f3_extra = 0.13902848
+    if coeffs is None:
+        coeffs = _DEFAULT_GLAUM_COEFFS
+
+    f2 = coeffs["f2"]
+    f3_extra = coeffs["f3_extra"]
     f3 = 1.0 - ((1.0 - f2) * (1.0 - f3_extra))
+    max_caps_cfg = list(coeffs["max_caps"]) + [np.inf]
     return WakeSplitSpec(
         factors=[0.0, f2, f3],           # Tier1, Tier2, Tier3 marginal losses (fractions)
-        max_caps=[2e3, 10e3, np.inf],    # MW segment caps (0–2GW, next 10GW => up to 12GW, then inf)
+        max_caps=max_caps_cfg,
     )
 
 
@@ -334,10 +394,11 @@ def add_wake_generators(n, snakemake, method: str) -> None:
     wake_generators = n.generators.loc[mapping.index].copy()
 
     mods = get_offshore_mods(snakemake.config)
+    coeffs = get_wake_coefficients(mods, method)
     wdir = get_wake_dir(mods)
 
     if method == "new_more":
-        tech_for_threshold = "offwind"  # ✅ canonical offshore category
+        tech_for_threshold = "offwind"  # canonical offshore category
         threshold = get_threshold(mods, tech_for_threshold)
 
         offshore_reg = load_regions(
@@ -359,7 +420,7 @@ def add_wake_generators(n, snakemake, method: str) -> None:
                 f"First missing regions: {missing[:10]!r}"
             )
 
-        spec, x = _new_more_spec()
+        spec, x = _new_more_spec(coeffs)
         factors = spec.factors
 
         dx = np.diff(np.asarray(x, dtype=float))  # length 6
@@ -382,13 +443,14 @@ def add_wake_generators(n, snakemake, method: str) -> None:
         }
 
     else:  # glaum
-        n.generators_t.p_max_pu.loc[:, mapping.index] *= 0.906
+        global_derate = coeffs.get("global_derate", 0.906)
+        n.generators_t.p_max_pu.loc[:, mapping.index] *= global_derate
 
         big = wake_generators[wake_generators.p_nom_max > 2e3].copy()
         if big.empty:
             return
 
-        spec = _glaum_spec()
+        spec = _glaum_spec(coeffs)
         for i, f in enumerate(spec.factors, start=1):
             big[f"factor_wake_{i}"] = f
         for i, cap in enumerate(spec.max_caps, start=1):
@@ -503,24 +565,23 @@ def fill_shape_with_points(
     if initial_num < 2:
         raise ValueError("`initial_num` must be >= 2.")
 
-    prepared = prep(shape)
-    x_min, y_min, x_max, y_max = shape.bounds
+    from shapely.vectorized import contains as vec_contains
 
-    collected: List[Tuple[float, float]] = []
+    x_min, y_min, x_max, y_max = shape.bounds
+    collected = np.empty((0, 2), dtype=float)
     num = int(initial_num)
 
     for _ in range(max_iter):
         xs = np.linspace(x_min, x_max, num=num)
         ys = np.linspace(y_min, y_max, num=num)
         xx, yy = np.meshgrid(xs, ys, indexing="xy")
-        coords = np.column_stack([xx.ravel(), yy.ravel()])
 
-        for x, y in coords:
-            if prepared.contains(Point(float(x), float(y))):
-                collected.append((float(x), float(y)))
+        mask = vec_contains(shape, xx.ravel(), yy.ravel())
+        new_pts = np.column_stack([xx.ravel()[mask], yy.ravel()[mask]])
 
-        if len(collected) >= min_points:
-            uniq = np.unique(np.asarray(collected, dtype=float), axis=0)
+        if new_pts.size:
+            collected = np.vstack([collected, new_pts])
+            uniq = np.unique(collected, axis=0)
             if len(uniq) >= min_points:
                 return uniq
 
@@ -541,7 +602,7 @@ def fill_shape_with_points(
 
 
 def voronoi_partition(points: ArrayLike2D, outline: Geometry) -> List[Polygon]:
-    """Compute a Voronoi partition of `points` clipped to `outline`."""
+    """Compute a Voronoi partition of *points* clipped to *outline*."""
     pts = _as_2d_points(points)
 
     if len(pts) == 1:
@@ -549,42 +610,33 @@ def voronoi_partition(points: ArrayLike2D, outline: Geometry) -> List[Polygon]:
             return [outline]
         return list(outline.geoms)
 
-    xmin, ymin = pts.min(axis=0)
-    xmax, ymax = pts.max(axis=0)
-    xspan = xmax - xmin
-    yspan = ymax - ymin
+    from shapely import MultiPoint
+    from shapely.ops import voronoi_diagram
+    from shapely.validation import make_valid
 
-    framing = np.array(
-        [
-            [xmin - 3.0 * xspan, ymin - 3.0 * yspan],
-            [xmin - 3.0 * xspan, ymax + 3.0 * yspan],
-            [xmax + 3.0 * xspan, ymin - 3.0 * yspan],
-            [xmax + 3.0 * xspan, ymax + 3.0 * yspan],
-        ],
-        dtype=float,
-    )
-    vor = Voronoi(np.vstack([pts, framing]))
+    # Ensure outline is valid before computing intersections
+    if not outline.is_valid:
+        outline = make_valid(outline)
+
+    mp = MultiPoint([tuple(p) for p in pts])
+    vd = voronoi_diagram(mp, envelope=outline)
 
     cells: List[Polygon] = []
-    for i in range(len(pts)):
-        region_idx = vor.point_region[i]
-        region = vor.regions[region_idx]
-
-        if not region or -1 in region:
-            poly = outline
-        else:
-            poly = Polygon(vor.vertices[region])
-
-        if not poly.is_valid:
-            poly = poly.buffer(0)
-
-        clipped = poly.intersection(outline)
+    for cell in vd.geoms:
+        if not cell.is_valid:
+            cell = make_valid(cell)
+        try:
+            clipped = cell.intersection(outline)
+        except Exception:
+            clipped = cell.buffer(0).intersection(outline.buffer(0))
         if clipped.is_empty:
             continue
+        if not clipped.is_valid:
+            clipped = make_valid(clipped)
         if isinstance(clipped, Polygon):
             cells.append(clipped)
         elif isinstance(clipped, MultiPolygon):
-            cells.extend([g for g in clipped.geoms if isinstance(g, Polygon)])
+            cells.extend(g for g in clipped.geoms if isinstance(g, Polygon))
 
     return cells
 
@@ -597,6 +649,10 @@ def mesh_region(
     min_points_factor: int = 5,
 ) -> List[Polygon]:
     """Split a region into Voronoi cells if above an area threshold."""
+    if not geometry.is_valid:
+        from shapely.validation import make_valid
+        geometry = make_valid(geometry)
+
     if area_km2 <= threshold_km2:
         if isinstance(geometry, Polygon):
             return [geometry]
@@ -622,19 +678,33 @@ def split_regions(
     if regions.geometry is None:
         raise ValueError("`regions` must have a geometry column.")
 
+    from pyproj import Transformer
+    from shapely.ops import transform as shapely_transform
+
     reg = regions.copy().to_crs(out_crs)
-    reg["_area_km2"] = reg.to_crs(area_crs).area / 1e6
+    reg_ea = reg.to_crs(area_crs)
+    reg["_area_km2"] = reg_ea.area / 1e6
+
+    to_out = Transformer.from_crs(area_crs, out_crs, always_xy=True)
 
     parts: List[gpd.GeoDataFrame] = []
-    for _, row in reg.iterrows():
+    for idx, row in reg.iterrows():
         geom = row.geometry
         if geom is None or geom.is_empty:
             continue
 
         bus_main = row.iloc[0]
         area_km2 = float(row["_area_km2"])
+        geom_ea = reg_ea.loc[idx, "geometry"]
 
-        sub_geoms = mesh_region(geom, area_km2, threshold_km2, random_state=random_state)
+        # Compute Voronoi in equal-area coordinates for uniform cell sizes
+        sub_geoms_ea = mesh_region(
+            geom_ea, area_km2, threshold_km2, random_state=random_state,
+        )
+        sub_geoms = [
+            shapely_transform(to_out.transform, g) for g in sub_geoms_ea
+        ]
+
         parts.append(
             gpd.GeoDataFrame({bus_main_col: [bus_main] * len(sub_geoms), "geometry": sub_geoms}, crs=out_crs)
         )
