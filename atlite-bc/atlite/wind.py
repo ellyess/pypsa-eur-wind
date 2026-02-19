@@ -36,6 +36,11 @@ def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
         If not provided, the closest height to 'to_height' is selected.
     to_height : int|float
         Height (m) to which the wind speeds are extrapolated to.
+    bias_corr : bool or str or Path, optional
+        If False (default), no bias correction is applied.
+        If True, bias correction is applied using 'bias-extra/atlite_bias.nc'.
+        If a string or Path, it is used as the path to the bias correction
+        dataset (must contain 'scalar' and 'offset' variables).
 
     Returns
     -------
@@ -72,22 +77,32 @@ def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
     wnd_spd = ds[from_name] * (
         np.log(to_height / ds["roughness"]) / np.log(from_height / ds["roughness"])
     )
-    print("DOES THIS WORK PRIOR TO BIAS CORR???")
+
     # Bias correction based on Ellyess et al. (10.1016/j.energy.2024.133759)
     if bias_corr:
-        print("IS THIS WORKING??!?!?!?!? IF YOU SEE THIS THEN BIAS CORRECT TRUE")
-        # wnd_spd.to_netcdf('bias-extra/atlite_ws_uncorrected.nc')
-        bias_fac = xr.open_dataset('bias-extra/alite_bias.nc')
+        from pathlib import Path
+
+        if isinstance(bias_corr, (str, Path)) and str(bias_corr) not in ("True", "true"):
+            bias_path = str(bias_corr)
+        else:
+            bias_path = "bias-extra/atlite_bias.nc"
+
+        logger.info("Applying wind speed bias correction from %s", bias_path)
+        bias_fac = xr.open_dataset(bias_path)
+        # # Handle both x/y and lon/lat coordinate conventions
+        # if "lon" in bias_fac.dims and "lat" in bias_fac.dims:
+        #     interp_kw = dict(lon=wnd_spd.x.values, lat=wnd_spd.y.values)
+        # else:
+        interp_kw = dict(x=wnd_spd.x.values, y=wnd_spd.y.values)
         scalar = bias_fac.scalar.interp(
-                    method='nearest',
-                    x=wnd_spd.x.values, y=wnd_spd.y.values,
-                    kwargs={"fill_value": 1.0})
+            method="nearest", **interp_kw,
+            kwargs={"fill_value": 1.0},
+        )
         offset = bias_fac.offset.interp(
-                    method='nearest',
-                    x=wnd_spd.x.values, y=wnd_spd.y.values,
-                    kwargs={"fill_value": 0.0})
-        wnd_spd = (wnd_spd*scalar) + offset
-        # wnd_spd.to_netcdf('bias-extra/atlite_ws_corrected.nc')
+            method="nearest", **interp_kw,
+            kwargs={"fill_value": 0.0},
+        )
+        wnd_spd = (wnd_spd * scalar) + offset
 
     wnd_spd.attrs.update(
         {

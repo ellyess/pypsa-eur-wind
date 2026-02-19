@@ -122,13 +122,18 @@ import logging
 import time
 
 import atlite
-import geopandas as gpd
 import xarray as xr
 from _helpers import configure_logging, get_snapshots, set_scenario_config
 from build_shapes import _simplify_polys
 from dask.distributed import Client
 
-from pathlib import Path
+from wake_helpers import (
+    get_offshore_mods,
+    get_threshold,
+    get_wake_dir,
+    profile_cache_path,
+    load_regions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,36 +155,45 @@ if __name__ == "__main__":
     resource = params["resource"]  # pv panel params / wind turbine params
     resource["show_progress"] = not noprogress
 
+    #################################################################################
+    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
+    #################################################################################
     clusters = snakemake.wildcards.clusters
-    
-    #################################################################################
-    ############# ELLYESS BENMOUFOK - CHECKING FOR EXISTING WAKE EFFECT FILE ########
-    #################################################################################
+
+    mods = get_offshore_mods(snakemake.config)
+    wdir = get_wake_dir(mods)
+
+    # Threshold for wind based on onwind/offwind; for non-wind you can still define a default
+    # (often onshore threshold is fine, but feel free to pick something else)
+    threshold = get_threshold(mods, technology) if "wind" in technology else int(mods.get("onshore_threshold", 0))
+
+    bias = None
     if "wind" in technology:
-        if snakemake.wildcards.technology.startswith("onwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
-        elif snakemake.wildcards.technology.startswith("offwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-        
-        bias_bool = str(snakemake.params.renewable[technology]["resource"].get("bias_corr"))
-        wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}_{bias_bool}.nc"
-    else:
-        threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
-        wake_extras = "wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/profile_{clusters}_{technology}_{threshold}.geojson"
-    
+        # keep your bias string stable for caching; None means "no bias suffix"
+        bias = str(snakemake.params.renewable[technology]["resource"].get("bias_corr"))
+
+    correction_factor = params.get("correction_factor", 1.0)
+
+    cache_path = profile_cache_path(
+        wake_dir=wdir,
+        clusters=clusters,
+        technology=technology,
+        threshold=threshold,
+        bias=bias,
+        correction_factor=correction_factor,
+    )
+
     # Check if file already exists
-    my_file = Path(wake_extras)
-    if my_file.is_file():
-        ds = xr.open_dataset(my_file)
+    if cache_path.is_file():
+        ds = xr.open_dataset(cache_path)
         ds.to_netcdf(snakemake.output.profile)
-    else:   
+    else:
         tech = next(t for t in ["panel", "turbine"] if t in resource)
         models = resource[tech]
         if not isinstance(models, dict):
             models = {0: models}
         resource[tech] = models[next(iter(models))]
 
-        correction_factor = params.get("correction_factor", 1.0)
         capacity_per_sqkm = params["capacity_per_sqkm"]
 
         if correction_factor != 1.0:
@@ -191,21 +205,18 @@ if __name__ == "__main__":
             client = None
 
         sns = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
-
         cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
-
         availability = xr.open_dataarray(snakemake.input.availability_matrix)
-
-        # Load split regions file for wind technologies
-        if snakemake.wildcards.technology.startswith("offwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_offshore_s"+str(threshold)+".geojson")
-        elif snakemake.wildcards.technology.startswith("onwind"):
-            threshold = int(snakemake.config["offshore_mods"].get("onshore_threshold"))
-            regions = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+"/regions_onshore_s"+str(threshold)+".geojson")
-        else:
-            regions = gpd.read_file(snakemake.input.regions)
-            
+        
+        regions = load_regions(
+            technology=technology,
+            threshold=threshold,
+            wake_dir=wdir,
+            fallback_path=snakemake.input.regions,
+        )
+    #################################################################################
+    #################################################################################
+    
         assert not regions.empty, (
             f"List of regions in {snakemake.input.regions} is empty, please "
             "disable the corresponding renewable technology"
@@ -319,8 +330,7 @@ if __name__ == "__main__":
             min_p_max_pu = params["clip_p_max_pu"]
             ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
             
-        ds.to_netcdf(my_file)
-
+        ds.to_netcdf(cache_path)
         ds.to_netcdf(snakemake.output.profile)
 
         if client is not None:

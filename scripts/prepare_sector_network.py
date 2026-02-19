@@ -1915,7 +1915,7 @@ def add_fuel_cell_cars(n, p_set, fuel_cell_share, temperature):
         suffix=" land transport fuel cell",
         bus=spatial.h2.nodes,
         carrier="land transport fuel cell",
-        p_set=profile,
+        p_set=profile.loc[n.snapshots],
     )
 
 

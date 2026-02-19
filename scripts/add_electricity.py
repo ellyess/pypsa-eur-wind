@@ -111,12 +111,10 @@ network with **zero** initial capacity:
 """
 
 import logging
-from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import powerplantmatching as pm
 import pypsa
 import xarray as xr
@@ -129,27 +127,18 @@ from _helpers import (
 from powerplantmatching.export import map_country_bus
 from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_uniform
 
+from scripts.wake_helpers import (
+    get_offshore_mods,
+    get_wake_coefficients,
+    add_wake_generators,
+    drop_non_dominant_offwind_generators,
+)
+
+from pathlib import Path
+
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
-#################################################
-# from add_wind_functions import add_wake_generators
-
-
-from pyproj import Geod
-from shapely.geometry import Point, Polygon
-from sklearn.cluster import KMeans
-from scipy.spatial import Voronoi
-import pandas as pd
-import numpy as np
-
-def calculate_area(shape, ellipsoid="WGS84"):
-    """
-    Calculates area in km².
-    """
-    geod = Geod(ellps=ellipsoid)
-    return abs(geod.geometry_area_perimeter(shape)[0]) / 1e6
-#############################################################################
 
 def normed(s):
     return s / s.sum()
@@ -537,21 +526,7 @@ def attach_wind_and_solar(
                     lifetime=costs.at[supcar, "lifetime"],
                 ) 
                 
-                # else:
-                #     n.add(
-                #         "Generator",
-                #         ds.indexes["bus"],
-                #         " " + car,
-                #         bus=ds.indexes["bus"],
-                #         carrier=car,
-                #         p_nom_extendable=car in extendable_carriers["Generator"],
-                #         p_nom_max=ds["p_nom_max"].to_pandas(),
-                #         marginal_cost=costs.at[supcar, "marginal_cost"],
-                #         capital_cost=capital_cost,
-                #         efficiency=costs.at[supcar, "efficiency"],
-                #         p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
-                #         lifetime=costs.at[supcar, "lifetime"],
-                #     )
+
             else:
                 capital_cost = costs.at[car, "capital_cost"]
 
@@ -1025,173 +1000,64 @@ def attach_stores(n, costs, extendable_carriers):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
-#################################################################################
-############# ELLYESS BENMOUFOK - ADDING WAKE EFFECTS TO OFFSHORE WIND ##########
-#################################################################################
-def add_wake_generators(method):
-    """
-    Adding wake effect to offshore wind generators based on different methods.
-    
-    Args:
-    - n: The PyPSA network.
-    - method: The method to apply wake effects. Options are 'new_more' or 'glaum'.
-    Returns:
-    - None
-    """
-    # Filtering only offwind and getting region number
-    mapping = (
-            n.generators.filter(like="offwind", axis=0)
-            .index.to_series()
-            .str.replace(" offwind-\w+", "", regex=True)
+
+# FIX BUILD-OUT MAX_CAPACITY
+def _get_current_scenario(snakemake) -> str:
+    # your wildcards include `run`
+    return str(snakemake.wildcards.run)
+
+def _ref_scenario(current: str) -> str:
+    parts = current.split("-", 1)
+    return "base" if len(parts) == 1 else "base-" + parts[1]
+
+def _get_year(snakemake) -> int:
+    # robust for your pipeline (cost year is what matters for filename)
+    try:
+        return int(snakemake.params.costs["year"])
+    except Exception:
+        return int(snakemake.config["costs"]["year"])
+
+def _reference_postnetwork_path(snakemake, clusters: int) -> Path:
+    current = _get_current_scenario(snakemake)
+    ref_run = _ref_scenario(current)
+
+    root = snakemake.config.get("fixed_offwind", {}).get("results_root", None)
+    if not root:
+        raise ValueError("Set fixed_offwind.results_root in config to point at results/...")
+
+    year = _get_year(snakemake)
+    return Path(root) / ref_run / "postnetworks" / f"base_s_{clusters}_lvopt___{year}.nc"
+
+def apply_reference_offwind_buildout(n: pypsa.Network, ref_path: Path, carrier="offwind-combined"):
+    ref_path = Path(ref_path)
+    if not ref_path.is_file():
+        raise FileNotFoundError(f"Reference network not found: {ref_path}")
+
+    ref = pypsa.Network(ref_path)
+
+    mask = n.generators.carrier == carrier
+    if not mask.any():
+        return
+
+    ref_mask = ref.generators.carrier == carrier
+    if not ref_mask.any():
+        raise ValueError(f"Reference has no generators with carrier={carrier!r}: {ref_path}")
+
+    idx = n.generators.index[mask].intersection(ref.generators.index[ref_mask])
+    missing = n.generators.index[mask].difference(ref.generators.index[ref_mask])
+    if len(missing):
+        ex = ", ".join(list(missing[:5]))
+        raise ValueError(
+            "Offshore generators do not match reference (clustering/busmap/regions mismatch?). "
+            f"First missing in ref: {ex}"
         )
-    wake_generators = n.generators.loc[mapping.index,:]
 
-    # New more complex method
-    if method == 'new_more':
-        # loading region file to use the regional area
-        
-        threshold = int(snakemake.config["offshore_mods"].get("offshore_threshold"))
-        offshore_reg = gpd.read_file("wake_extra/"+str(snakemake.config["offshore_mods"].get("shared_files"))+f"/regions_offshore_s"+str(threshold)+".geojson").set_index("name")
+    n.generators.loc[idx, "p_nom"] = ref.generators.loc[idx, "p_nom"]
+    # Optional but useful: also lock bounds already at build stage
+    n.generators.loc[idx, "p_nom_min"] = n.generators.loc[idx, "p_nom"]
+    n.generators.loc[idx, "p_nom_max"] = n.generators.loc[idx, "p_nom_max"]  # leave siting potential untouched
 
-        wake_generators['regions'] = mapping
-        wake_generators = wake_generators.merge(
-                offshore_reg[['area']], right_index=True, left_on="regions"
-                )
-        
-        def y(x):
-            alpha = 7.3
-            beta = 0.05
-            gamma = -0.7
-            delta = -14.6
-            return alpha*np.exp(-x/beta) + gamma*x + delta
-
-        def piecewise(x0,x1):
-            return (y(x1)*x1 - y(x0)*x0)/(x1-x0)
-
-        x0,x1,x2,x3,x4,x5,x6 = 0,0.025,0.05,0.25,1,2.5,4
-        wake_generators["factor_wake_1"] = -(piecewise(x0,x1))/100
-        wake_generators["factor_wake_2"] = -(piecewise(x1,x2))/100
-        wake_generators["factor_wake_3"] = -(piecewise(x2,x3))/100
-        wake_generators["factor_wake_4"] = -(piecewise(x3,x4))/100
-        wake_generators["factor_wake_5"] = -(piecewise(x4,x5))/100
-        wake_generators["factor_wake_6"] = -(piecewise(x5,x6))/100
-        wake_generators["max_capacity_1"] = wake_generators["area"] * x1
-        wake_generators["max_capacity_2"] = wake_generators["area"] * (x2-x1)
-        wake_generators["max_capacity_3"] = wake_generators["area"] * (x3-x2)
-        wake_generators["max_capacity_4"] = wake_generators["area"] * (x4-x3)
-        wake_generators["max_capacity_5"] = wake_generators["area"] * (x5-x4)
-        wake_generators["max_capacity_6"] = np.inf
-        
-        split_generators = {
-            1: wake_generators[wake_generators.p_nom_max < wake_generators.max_capacity_1],
-            2: wake_generators[(wake_generators.p_nom_max >= wake_generators.max_capacity_1) & (wake_generators.p_nom_max < (wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            3: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            4: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            5: wake_generators[(wake_generators.p_nom_max >= (wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)) & (wake_generators.p_nom_max < (wake_generators.max_capacity_5+wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1))],
-            6: wake_generators[wake_generators.p_nom_max >= (wake_generators.max_capacity_5+wake_generators.max_capacity_4+wake_generators.max_capacity_3+wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
     
-    # Glaum et al. 2020 method
-    elif method == 'glaum':
-        # n.generators.loc[mapping.index, "p_nom_max"] = n.generators.loc[mapping.index, "p_nom_max"] * 0.906
-        n.generators_t.p_max_pu.loc[:,mapping.index] = n.generators_t.p_max_pu.loc[:,mapping.index]  * 0.906
-        
-        # only apply wake effect for generators greater than 2GW
-        wake_generators = wake_generators[wake_generators.p_nom_max > 2e3]
-        # wake_generators["factor_wake_1"] = 0
-        # wake_generators["factor_wake_2"] = 0.1279732
-        # wake_generators["factor_wake_3"] = 0.13902848
-        wake_generators["factor_wake_1"] = 0
-        wake_generators["factor_wake_2"] = 0.1279732
-        wake_generators["factor_wake_3"] = (1 - ((1-0.1279732)*(1-0.13902848)))
-        wake_generators["max_capacity_1"] = 2e3
-        wake_generators["max_capacity_2"] = 10e3
-        wake_generators["max_capacity_3"] = np.inf
-        split_generators = {
-            2: wake_generators[wake_generators.p_nom_max <= (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-            3: wake_generators[wake_generators.p_nom_max > (wake_generators.max_capacity_2+wake_generators.max_capacity_1)],
-        }
-    
-    generators_to_add = list()
-    generators_t_to_add = list()
-    generators_to_add_labels = list()
-    generators_to_drop = list()
-
-    # split generators into multiple generators with different time series
-    for num, df in split_generators.items():
-        for generator_i in df.index:
-            generators_to_drop.append(generator_i)
-            used_capacity = 0
-            p_nom = 0
-            for i in range(1, num + 1):
-                generator = df.loc[generator_i].copy()
-                generator_t = n.generators_t.p_max_pu.loc[:, generator_i].copy()
-                if used_capacity + generator["max_capacity_" +str(i)] <= generator.p_nom_max:
-                    generator["p_nom_max"] = generator["max_capacity_" +str(i)]
-                    used_capacity += generator["max_capacity_" +str(i)]
-                else:
-                    generator.p_nom_max = generator.p_nom_max - used_capacity
-                    used_capacity = generator.p_nom_max
-                # adjust p_nom of the generators that the sum of the split generators is equal to the original p_nom
-                if p_nom != generator.p_nom:
-                    if generator["max_capacity_" +str(i)] < generator.p_nom - p_nom:
-                        generator["p_nom"] = generator["max_capacity_" +str(i)]
-                        generator["p_nom_min"] = generator["max_capacity_" +str(i)]
-                    else:
-                        generator["p_nom"] = generator["p_nom"] - p_nom
-                        generator["p_nom_min"] = generator["p_nom_min"] - p_nom
-                elif p_nom == generator["p_nom"]:
-                    generator["p_nom"] = 0
-                    generator["p_nom_min"] = 0
-                p_nom += generator["p_nom"]
-                generators_to_add_labels.append(generator_i + " w" + str(i))
-                generators_to_add.append(generator)
-                generators_t_to_add.append(generator_t * (1 - generator["factor_wake_" +str(i)]))
-    # delete original generators and add split generators
-    n.generators.drop(index=generators_to_drop, inplace=True)
-    n.generators_t.p_max_pu.drop(columns=generators_to_drop, inplace=True)
-    # add wake effect generators
-    n.generators = pd.concat(
-        [
-            n.generators,
-            pd.concat(
-                generators_to_add, axis=1, keys=generators_to_add_labels
-            ).T.infer_objects(),
-        ],
-        axis=0,
-    )
-    n.generators_t.p_max_pu = pd.concat(
-        [
-            n.generators_t.p_max_pu,
-            pd.concat(generators_t_to_add, axis=1, keys=generators_to_add_labels),
-        ],
-        axis=1,
-    )
-    n.generators_t.p_max_pu.columns.names = ["Generator"]
-    ########
-
-def drop_non_dominant_offwind_generators():
-    """
-    Drop non-dominant offshore wind generators in each region, keeping only the one with the highest capacity.
-    Args:
-    - n: The PyPSA network.
-    Returns:
-    - None
-    """
-    generators = n.generators.filter(regex="offwind", axis=0).copy()
-    generators['region'] = generators.index.to_series().str.replace(r" offwind-\w+", "", regex=True)
-
-    total = generators.groupby('region')['p_nom_max'].transform('sum')
-    generators['% of capacity'] = generators['p_nom_max'].div(total)
-
-    generators_to_keep = generators.sort_values('% of capacity').drop_duplicates(['region'], keep='last').index
-    # generators_to_keep = generators_to_keep[generators_to_keep.p_nom_max >= 12].index # removing anything lower than 12MW
-
-    generators_to_drop = generators.drop(index=generators_to_keep).index
-    n.generators.drop(index=generators_to_drop, inplace=True)
-    n.generators_t.p_max_pu.drop(columns=generators_to_drop, inplace=True)
-
-
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1286,11 +1152,11 @@ if __name__ == "__main__":
         landfall_lengths,
     )
     
-    
-    # attempt to drop
-    drop_gens = str(snakemake.config["offshore_mods"].get("mode"))
-    if drop_gens == "dominant":
-        drop_non_dominant_offwind_generators()
+    mods = get_offshore_mods(snakemake.config)
+
+    # 1) Optionally drop non-dominant offshore generators
+    if mods.get("mode") == "dominant":
+        drop_non_dominant_offwind_generators(n)
     
     
     if "hydro" in renewable_carriers:
@@ -1327,20 +1193,41 @@ if __name__ == "__main__":
 
     update_p_nom_max(n)
     
-    # adding wake effects based on selected method
-    wake_model = str(snakemake.config["offshore_mods"].get("wake_model"))
-    if wake_model != "base":
-        if wake_model == "standard":
-            mapping = (
-                n.generators.filter(like="offwind", axis=0)
-                .index.to_series()
-                .str.replace(" offwind-\w+", "", regex=True)
-            )
-            # n.generators.loc[mapping.index, "p_nom_max"] = n.generators.loc[mapping.index, "p_nom_max"] * 0.8855
-            n.generators_t.p_max_pu.loc[:,mapping.index] = n.generators_t.p_max_pu.loc[:,mapping.index]  * 0.8855
-        else:
-            add_wake_generators(wake_model)
+    # # --- Fixed build-out injection (so wake correction sees reference p_nom) ---
+    # if snakemake.config.get("fixed_offwind", {}).get("enable", False):
+    #     clusters = int(snakemake.wildcards.clusters)
+    #     ref_path = _reference_postnetwork_path(snakemake, clusters=clusters)
+    #     logger.info(f"Injecting reference offwind build-out from: {ref_path}")
+    #     apply_reference_offwind_buildout(
+    #         n,
+    #         ref_path,
+    #         carrier=snakemake.config["fixed_offwind"].get("carrier", "offwind-combined"),
+    #     )
+    
+    # 2) Apply wake effects
+    wake_model = mods.get("wake_model", "base")
 
+    if wake_model == "standard":
+        # Simple multiplicative derating
+        coeffs = get_wake_coefficients(mods, "standard")
+        derate = coeffs.get("derate_factor", 0.8855)
+        offwind_idx = n.generators.filter(like="offwind", axis=0).index
+        if len(offwind_idx):
+            n.generators_t.p_max_pu.loc[:, offwind_idx] *= derate
+
+    elif wake_model in {"new_more", "glaum"}:
+        # Full wake modelling (region-aware, split generators)
+        add_wake_generators(n, snakemake, method=wake_model)
+
+    elif wake_model in {"base", None, ""}:
+        # No wake effects
+        pass
+
+    else:
+        raise ValueError(
+            f"Unknown offshore_mods.wake_model={wake_model!r}. "
+            "Valid options: 'base', 'standard', 'new_more', 'glaum'."
+        )
             
     attach_storageunits(n, costs, extendable_carriers, max_hours)
     attach_stores(n, costs, extendable_carriers)
