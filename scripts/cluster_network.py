@@ -118,10 +118,10 @@ from _helpers import configure_logging, set_scenario_config
 from wake_helpers import (
     get_offshore_mods,
     get_threshold,
-    get_wake_dir,        # canonical name
+    get_wake_dir,
     regions_file,
-    split_regions,   # moved here (remove add_wind_functions import)
 )
+from split_regions import split_regions
 
 PD_GE_2_2 = parse(pd.__version__) >= Version("2.2")
 
@@ -426,10 +426,8 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     # nc.shapes = n.shapes.copy()
-    
-    #################################################################################
-    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
-    #################################################################################
+
+    # Region splitting for variable wind resource resolution
     mods = get_offshore_mods(snakemake.config)
     wdir = get_wake_dir(mods)
 
@@ -448,7 +446,9 @@ if __name__ == "__main__":
         if which == "regions_offshore":
             sea_shape = mods.get("sea_shape")
             if sea_shape:
-                clustered = clustered.clip(gpd.read_file(sea_shape)).reset_index(drop=True)
+                clustered = clustered.clip(gpd.read_file(sea_shape)).reset_index(
+                    drop=True
+                )
 
         # Always write clustered regions to the rule outputs (clipped if offshore)
         clustered.to_file(snakemake.output[which], driver="GeoJSON")
@@ -468,11 +468,6 @@ if __name__ == "__main__":
                 # split cache
                 meshed = split_regions(clustered_4326, threshold_km2=threshold)
                 meshed.to_file(out_path, driver="GeoJSON")
-
-
-
-    #################################################################################
-    #################################################################################   
 
     nc.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     nc.export_to_netcdf(snakemake.output.network)

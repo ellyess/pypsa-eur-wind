@@ -72,6 +72,7 @@ Outputs
 
 - ``resources/availability_matrix_{clusters_{technology}.nc``
 """
+
 import functools
 import logging
 import time
@@ -108,9 +109,7 @@ if __name__ == "__main__":
     technology = snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
-    #################################################################################
-    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
-    #################################################################################
+    # Variable spatial resolution: cache and region loading
     clusters = snakemake.wildcards.clusters
 
     mods = get_offshore_mods(snakemake.config)
@@ -118,7 +117,11 @@ if __name__ == "__main__":
 
     # Wind techs use onshore/offshore thresholds; for non-wind you can still call
     # get_threshold only if you want wind-only caching. Most workflows do this only for wind.
-    threshold = get_threshold(mods, technology) if "wind" in technology else int(mods.get("onshore_threshold", 0))
+    threshold = (
+        get_threshold(mods, technology)
+        if "wind" in technology
+        else int(mods.get("onshore_threshold", 0))
+    )
 
     cache_path = availability_cache_path(
         wake_dir=wdir,
@@ -138,9 +141,7 @@ if __name__ == "__main__":
             wake_dir=wdir,
             fallback_path=snakemake.input.regions,
         )
-    #################################################################################
-    #################################################################################
-    
+
         assert not regions.empty, (
             f"List of regions in {snakemake.input.regions} is empty, please "
             "disable the corresponding renewable technology"
@@ -172,13 +173,23 @@ if __name__ == "__main__":
             if "grid_codes" in settings:
                 codes = settings["grid_codes"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, invert=True, crs=3035, allow_no_overlap=True,**kwargs
+                    snakemake.input[dataset],
+                    codes=codes,
+                    invert=True,
+                    crs=3035,
+                    allow_no_overlap=True,
+                    **kwargs,
                 )
             if settings.get("distance", 0.0) > 0.0:
                 codes = settings["distance_grid_codes"]
                 buffer = settings["distance"]
                 excluder.add_raster(
-                    snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, allow_no_overlap=True, **kwargs
+                    snakemake.input[dataset],
+                    codes=codes,
+                    buffer=buffer,
+                    crs=3035,
+                    allow_no_overlap=True,
+                    **kwargs,
                 )
 
         if params.get("ship_threshold"):
@@ -187,7 +198,10 @@ if __name__ == "__main__":
             )  # approximation because 6 years of data which is hourly collected
             func = functools.partial(np.less, shipping_threshold)
             excluder.add_raster(
-                snakemake.input.ship_density, codes=func, crs=4326, allow_no_overlap=True
+                snakemake.input.ship_density,
+                codes=func,
+                crs=4326,
+                allow_no_overlap=True,
             )
 
         if params.get("max_depth"):
@@ -239,7 +253,7 @@ if __name__ == "__main__":
                 snakemake.input["availability_matrix_MD_UA"]
             )
             availability.loc[availability_MDUA.coords] = availability_MDUA
-            
+
         availability.to_netcdf(cache_path)
 
     availability.to_netcdf(snakemake.output[0])

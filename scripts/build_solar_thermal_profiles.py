@@ -55,10 +55,7 @@ if __name__ == "__main__":
 
     clusters = int(getattr(snakemake.wildcards, "clusters", 0))
 
-    cache_path = solar_thermal_cache_path(
-        wake_dir=wake_dir,
-        clusters=clusters
-    )
+    cache_path = solar_thermal_cache_path(wake_dir=wake_dir, clusters=clusters)
 
     out_path = Path(snakemake.output.solar_thermal)
 

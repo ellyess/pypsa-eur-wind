@@ -118,6 +118,7 @@ the weather data cutout from ``atlite``.
 The maximal installable potential for the node (`p_nom_max`) is computed by
 adding up the installable potentials of the individual grid cells.
 """
+
 import logging
 import time
 
@@ -155,9 +156,7 @@ if __name__ == "__main__":
     resource = params["resource"]  # pv panel params / wind turbine params
     resource["show_progress"] = not noprogress
 
-    #################################################################################
-    ################### ELLYESS BENMOUFOK - SPLITTING REGIONS #######################
-    #################################################################################
+    # Variable spatial resolution: cache and region loading
     clusters = snakemake.wildcards.clusters
 
     mods = get_offshore_mods(snakemake.config)
@@ -165,7 +164,11 @@ if __name__ == "__main__":
 
     # Threshold for wind based on onwind/offwind; for non-wind you can still define a default
     # (often onshore threshold is fine, but feel free to pick something else)
-    threshold = get_threshold(mods, technology) if "wind" in technology else int(mods.get("onshore_threshold", 0))
+    threshold = (
+        get_threshold(mods, technology)
+        if "wind" in technology
+        else int(mods.get("onshore_threshold", 0))
+    )
 
     bias = None
     if "wind" in technology:
@@ -207,21 +210,19 @@ if __name__ == "__main__":
         sns = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
         cutout = atlite.Cutout(snakemake.input.cutout).sel(time=sns)
         availability = xr.open_dataarray(snakemake.input.availability_matrix)
-        
+
         regions = load_regions(
             technology=technology,
             threshold=threshold,
             wake_dir=wdir,
             fallback_path=snakemake.input.regions,
         )
-    #################################################################################
-    #################################################################################
-    
+
         assert not regions.empty, (
             f"List of regions in {snakemake.input.regions} is empty, please "
             "disable the corresponding renewable technology"
         )
-        
+
         # do not pull up, set_index does not work if geo dataframe is empty
         regions = regions.set_index("name").rename_axis("bus")
         if snakemake.wildcards.technology.startswith("offwind"):
@@ -329,7 +330,7 @@ if __name__ == "__main__":
         if "clip_p_max_pu" in params:
             min_p_max_pu = params["clip_p_max_pu"]
             ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
-            
+
         ds.to_netcdf(cache_path)
         ds.to_netcdf(snakemake.output.profile)
 

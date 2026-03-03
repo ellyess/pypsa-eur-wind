@@ -21,11 +21,7 @@ from pathlib import Path
 from _helpers import get_snapshots, set_scenario_config
 from dask.distributed import Client, LocalCluster
 
-from wake_helpers import (
-    get_offshore_mods,
-    get_wake_dir,
-    temperature_cache_paths
-)
+from wake_helpers import get_offshore_mods, get_wake_dir, temperature_cache_paths
 
 # -----------------------------------------------------------------------------
 # main
@@ -34,6 +30,7 @@ from wake_helpers import (
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
+
         snakemake = mock_snakemake("build_temperature_profiles", clusters=48)
 
     set_scenario_config(snakemake)
@@ -72,9 +69,7 @@ if __name__ == "__main__":
         cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
 
         clustered_regions = (
-            gpd.read_file(snakemake.input.regions_onshore)
-            .set_index("name")
-            .buffer(0)
+            gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0)
         )
 
         I = cutout.indicatormatrix(clustered_regions)

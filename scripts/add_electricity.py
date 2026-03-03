@@ -127,8 +127,7 @@ from _helpers import (
 from powerplantmatching.export import map_country_bus
 from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_uniform
 
-from scripts.wake_helpers import (
-    get_offshore_mods,
+from scripts.wake_effects import (
     get_wake_coefficients,
     add_wake_generators,
     drop_non_dominant_offwind_generators,
@@ -139,6 +138,7 @@ from pathlib import Path
 idx = pd.IndexSlice
 
 logger = logging.getLogger(__name__)
+
 
 def normed(s):
     return s / s.sum()
@@ -524,8 +524,7 @@ def attach_wind_and_solar(
                     efficiency=costs.at[supcar, "efficiency"],
                     p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
                     lifetime=costs.at[supcar, "lifetime"],
-                ) 
-                
+                )
 
             else:
                 capital_cost = costs.at[car, "capital_cost"]
@@ -544,7 +543,7 @@ def attach_wind_and_solar(
                         efficiency=costs.at[supcar, "efficiency"],
                         p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
                         lifetime=costs.at[supcar, "lifetime"],
-                    ) 
+                    )
                 else:
                     n.add(
                         "Generator",
@@ -560,7 +559,7 @@ def attach_wind_and_solar(
                         p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
                         lifetime=costs.at[supcar, "lifetime"],
                     )
-                
+
 
 def attach_conventional_generators(
     n,
@@ -879,8 +878,8 @@ def estimate_renewable_capacities(
             n.generators.loc[tech_i, "p_nom_max"] = (
                 expansion_limit * n.generators.loc[tech_i, "p_nom_min"]
             )
-    
-    
+
+
 def attach_storageunits(n, costs, extendable_carriers, max_hours):
     carriers = extendable_carriers["StorageUnit"]
 
@@ -1006,9 +1005,11 @@ def _get_current_scenario(snakemake) -> str:
     # your wildcards include `run`
     return str(snakemake.wildcards.run)
 
+
 def _ref_scenario(current: str) -> str:
     parts = current.split("-", 1)
     return "base" if len(parts) == 1 else "base-" + parts[1]
+
 
 def _get_year(snakemake) -> int:
     # robust for your pipeline (cost year is what matters for filename)
@@ -1017,18 +1018,26 @@ def _get_year(snakemake) -> int:
     except Exception:
         return int(snakemake.config["costs"]["year"])
 
+
 def _reference_postnetwork_path(snakemake, clusters: int) -> Path:
     current = _get_current_scenario(snakemake)
     ref_run = _ref_scenario(current)
 
     root = snakemake.config.get("fixed_offwind", {}).get("results_root", None)
     if not root:
-        raise ValueError("Set fixed_offwind.results_root in config to point at results/...")
+        raise ValueError(
+            "Set fixed_offwind.results_root in config to point at results/..."
+        )
 
     year = _get_year(snakemake)
-    return Path(root) / ref_run / "postnetworks" / f"base_s_{clusters}_lvopt___{year}.nc"
+    return (
+        Path(root) / ref_run / "postnetworks" / f"base_s_{clusters}_lvopt___{year}.nc"
+    )
 
-def apply_reference_offwind_buildout(n: pypsa.Network, ref_path: Path, carrier="offwind-combined"):
+
+def apply_reference_offwind_buildout(
+    n: pypsa.Network, ref_path: Path, carrier="offwind-combined"
+):
     ref_path = Path(ref_path)
     if not ref_path.is_file():
         raise FileNotFoundError(f"Reference network not found: {ref_path}")
@@ -1041,7 +1050,9 @@ def apply_reference_offwind_buildout(n: pypsa.Network, ref_path: Path, carrier="
 
     ref_mask = ref.generators.carrier == carrier
     if not ref_mask.any():
-        raise ValueError(f"Reference has no generators with carrier={carrier!r}: {ref_path}")
+        raise ValueError(
+            f"Reference has no generators with carrier={carrier!r}: {ref_path}"
+        )
 
     idx = n.generators.index[mask].intersection(ref.generators.index[ref_mask])
     missing = n.generators.index[mask].difference(ref.generators.index[ref_mask])
@@ -1055,9 +1066,11 @@ def apply_reference_offwind_buildout(n: pypsa.Network, ref_path: Path, carrier="
     n.generators.loc[idx, "p_nom"] = ref.generators.loc[idx, "p_nom"]
     # Optional but useful: also lock bounds already at build stage
     n.generators.loc[idx, "p_nom_min"] = n.generators.loc[idx, "p_nom"]
-    n.generators.loc[idx, "p_nom_max"] = n.generators.loc[idx, "p_nom_max"]  # leave siting potential untouched
+    n.generators.loc[idx, "p_nom_max"] = n.generators.loc[
+        idx, "p_nom_max"
+    ]  # leave siting potential untouched
 
-    
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -1151,14 +1164,16 @@ if __name__ == "__main__":
         params.line_length_factor,
         landfall_lengths,
     )
-    
-    mods = get_offshore_mods(snakemake.config)
+
+    # Offshore wind wake effects and mode
+    wake_config = snakemake.config.get("electricity", {}).get("wake_model", {})
+    wake_method = wake_config.get("method", "flat")
+    offshore_mode = snakemake.config.get("offshore_mods", {}).get("mode")
 
     # 1) Optionally drop non-dominant offshore generators
-    if mods.get("mode") == "dominant":
+    if offshore_mode == "dominant":
         drop_non_dominant_offwind_generators(n)
-    
-    
+
     if "hydro" in renewable_carriers:
         p = params.renewable["hydro"]
         carriers = p.pop("carriers", [])
@@ -1192,43 +1207,47 @@ if __name__ == "__main__":
             )
 
     update_p_nom_max(n)
-    
-    # # --- Fixed build-out injection (so wake correction sees reference p_nom) ---
-    # if snakemake.config.get("fixed_offwind", {}).get("enable", False):
-    #     clusters = int(snakemake.wildcards.clusters)
-    #     ref_path = _reference_postnetwork_path(snakemake, clusters=clusters)
-    #     logger.info(f"Injecting reference offwind build-out from: {ref_path}")
-    #     apply_reference_offwind_buildout(
-    #         n,
-    #         ref_path,
-    #         carrier=snakemake.config["fixed_offwind"].get("carrier", "offwind-combined"),
-    #     )
-    
+
     # 2) Apply wake effects
-    wake_model = mods.get("wake_model", "base")
-
-    if wake_model == "standard":
-        # Simple multiplicative derating
-        coeffs = get_wake_coefficients(mods, "standard")
+    if wake_method == "flat":
+        # Simple multiplicative derating (current PyPSA-Eur default behavior)
+        coeffs = get_wake_coefficients(snakemake.config, "flat")
         derate = coeffs.get("derate_factor", 0.8855)
-        offwind_idx = n.generators.filter(like="offwind", axis=0).index
-        if len(offwind_idx):
-            n.generators_t.p_max_pu.loc[:, offwind_idx] *= derate
+        if derate != 1.0:
+            offwind_idx = n.generators.filter(like="offwind", axis=0).index
+            if len(offwind_idx):
+                n.generators_t.p_max_pu.loc[:, offwind_idx] *= derate
 
-    elif wake_model in {"new_more", "glaum"}:
+    elif wake_method in {"tiered_density", "capacity_tiered", "new_more", "glaum"}:
         # Full wake modelling (region-aware, split generators)
-        add_wake_generators(n, snakemake, method=wake_model)
+        import geopandas as gpd
 
-    elif wake_model in {"base", None, ""}:
+        regions_gdf = None
+        if wake_method in {"tiered_density", "new_more"}:
+            regions_path = (
+                snakemake.input.regions_offshore
+                if "regions_offshore" in snakemake.input
+                else snakemake.input.regions
+            )
+            regions_gdf = gpd.read_file(regions_path)
+
+        add_wake_generators(
+            n,
+            config=snakemake.config,
+            method=wake_method,
+            regions_gdf=regions_gdf,
+        )
+
+    elif wake_method in {"none", None, ""}:
         # No wake effects
         pass
 
     else:
         raise ValueError(
-            f"Unknown offshore_mods.wake_model={wake_model!r}. "
-            "Valid options: 'base', 'standard', 'new_more', 'glaum'."
+            f"Unknown electricity.wake_model.method={wake_method!r}. "
+            "Valid options: 'flat', 'tiered_density', 'capacity_tiered', 'none'."
         )
-            
+
     attach_storageunits(n, costs, extendable_carriers, max_hours)
     attach_stores(n, costs, extendable_carriers)
 
@@ -1238,4 +1257,3 @@ if __name__ == "__main__":
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])
-
