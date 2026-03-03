@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -14,9 +13,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, set_scenario_config
-from plot_summary import preferred_order, rename_techs
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
+
+from scripts._helpers import configure_logging, rename_techs, retry, set_scenario_config
+from scripts.make_summary import assign_locations
+from scripts.plot_summary import preferred_order
 
 logger = logging.getLogger(__name__)
 
@@ -45,23 +46,13 @@ def rename_techs_tyndp(tech):
         return tech
 
 
-def assign_location(n):
-    for c in n.iterate_components(n.one_port_components | n.branch_components):
-        ifind = pd.Series(c.df.index.str.find(" ", start=4), c.df.index)
-        for i in ifind.value_counts().index:
-            # these have already been assigned defaults
-            if i == -1:
-                continue
-            names = ifind.index[ifind == i]
-            c.df.loc[names, "location"] = names.str[:i]
-
-
 def load_projection(plotting_params):
     proj_kwargs = plotting_params.get("projection", dict(name="EqualEarth"))
     proj_func = getattr(ccrs, proj_kwargs.pop("name"))
     return proj_func(**proj_kwargs)
 
 
+@retry
 def plot_map(
     n,
     components=["links", "stores", "storage_units", "generators"],
@@ -71,7 +62,7 @@ def plot_map(
 ):
     tech_colors = snakemake.params.plotting["tech_colors"]
 
-    assign_location(n)
+    assign_locations(n)
     # Drop non-electric buses so they don't clutter the plot
     n.buses.drop(n.buses.index[n.buses.carrier != "AC"], inplace=True)
 
@@ -123,36 +114,19 @@ def plot_map(
         inplace=True,
     )
 
-    # --- sector-coupling safe guard: costs may be empty after filtering ---
-    if costs.empty:
-        logger.warning(
-            "No bus-level costs remain after filtering; skipping cost-based bus sizing."
-        )
-        costs = None
-        carriers = []
-    else:
-        # drop non-bus
-        to_drop = costs.index.levels[0].symmetric_difference(n.buses.index)
-        if len(to_drop) != 0:
-            logger.info(f"Dropping non-buses {to_drop.tolist()}")
-            costs.drop(to_drop, level=0, inplace=True, axis=0, errors="ignore")
+    # drop non-bus
+    to_drop = costs.index.levels[0].symmetric_difference(n.buses.index)
+    if len(to_drop) != 0:
+        logger.info(f"Dropping non-buses {to_drop.tolist()}")
+        costs.drop(to_drop, level=0, inplace=True, axis=0, errors="ignore")
 
-        # if everything got dropped, bail out cleanly
-        if costs.empty:
-            logger.warning(
-                "All costs were removed when aligning to AC buses; skipping cost-based bus sizing."
-            )
-            costs = None
-            carriers = []
-        else:
-            # make sure they are removed from index
-            if not isinstance(costs.index, pd.MultiIndex):
-                costs.index = pd.MultiIndex.from_tuples(costs.index.values)
+    # make sure they are removed from index
+    costs.index = pd.MultiIndex.from_tuples(costs.index.values)
 
-            threshold = 100e6  # 100 mEUR/a
-            carriers = costs.groupby(level=1).sum()
-            carriers = carriers.where(carriers > threshold).dropna()
-            carriers = list(carriers.index)
+    threshold = 100e6  # 100 mEUR/a
+    carriers = costs.groupby(level=1).sum()
+    carriers = carriers.where(carriers > threshold).dropna()
+    carriers = list(carriers.index)
 
     # PDF has minimum width, so set these to zero
     line_lower_threshold = 500.0
@@ -163,40 +137,40 @@ def plot_map(
 
     title = "added grid"
 
-    if snakemake.wildcards["ll"] == "v1.0":
+    if snakemake.params.transmission_limit == "lv1.0":
         # should be zero
-        line_widths = n.lines.s_nom_opt - n.lines.s_nom
-        link_widths = n.links.p_nom_opt - n.links.p_nom
+        line_width = n.lines.s_nom_opt - n.lines.s_nom
+        link_width = n.links.p_nom_opt - n.links.p_nom
         if transmission:
-            line_widths = n.lines.s_nom_opt
-            link_widths = n.links.p_nom_opt
+            line_width = n.lines.s_nom_opt
+            link_width = n.links.p_nom_opt
             linewidth_factor = 2e3
             line_lower_threshold = 0.0
             title = "current grid"
     else:
-        line_widths = n.lines.s_nom_opt - n.lines.s_nom_min
-        link_widths = n.links.p_nom_opt - n.links.p_nom_min
+        line_width = n.lines.s_nom_opt - n.lines.s_nom_min
+        link_width = n.links.p_nom_opt - n.links.p_nom_min
         if transmission:
-            line_widths = n.lines.s_nom_opt
-            link_widths = n.links.p_nom_opt
+            line_width = n.lines.s_nom_opt
+            link_width = n.links.p_nom_opt
             title = "total grid"
 
-    line_widths = line_widths.clip(line_lower_threshold, line_upper_threshold)
-    link_widths = link_widths.clip(line_lower_threshold, line_upper_threshold)
+    line_width = line_width.clip(line_lower_threshold, line_upper_threshold)
+    link_width = link_width.clip(line_lower_threshold, line_upper_threshold)
 
-    line_widths = line_widths.replace(line_lower_threshold, 0)
-    link_widths = link_widths.replace(line_lower_threshold, 0)
+    line_width = line_width.replace(line_lower_threshold, 0)
+    link_width = link_width.replace(line_lower_threshold, 0)
 
     fig, ax = plt.subplots(subplot_kw={"projection": proj})
     fig.set_size_inches(7, 6)
 
     n.plot(
-        bus_sizes=None if costs is None else costs / bus_size_factor,
-        bus_colors=tech_colors,
-        line_colors=ac_color,
-        link_colors=dc_color,
-        line_widths=line_widths / linewidth_factor,
-        link_widths=link_widths / linewidth_factor,
+        bus_size=costs / bus_size_factor,
+        bus_color=tech_colors,
+        line_color=ac_color,
+        link_color=dc_color,
+        line_width=line_width / linewidth_factor,
+        link_width=link_width / linewidth_factor,
         ax=ax,
         **map_opts,
     )
@@ -263,13 +237,12 @@ def plot_map(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "plot_power_network",
             opts="",
             clusters="37",
-            ll="v1.0",
             sector_opts="4380H-T-H-B-I-A-dist1",
         )
 

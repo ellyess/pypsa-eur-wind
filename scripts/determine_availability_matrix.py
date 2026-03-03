@@ -1,7 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -11,22 +8,6 @@ The script uses the `atlite <https://github.com/pypsa/atlite>`_ library and
 several GIS datasets like the CORINE land use data, LUISA land use data,
 Natura2000 nature reserves, GEBCO bathymetry data, and shipping lanes.
 
-Relevant settings
------------------
-
-.. code:: yaml
-
-    atlite:
-        nprocesses:
-
-    renewable:
-        {technology}:
-            cutout: corine: luisa: grid_codes: distance: natura: max_depth:
-            min_depth: max_shore_distance: min_shore_distance: resource:
-
-.. seealso::
-    Documentation of the configuration file ``config/config.yaml`` at
-    :ref:`atlite_cf`, :ref:`renewable_cf`
 
 Inputs
 ------
@@ -78,10 +59,17 @@ import logging
 import time
 
 import atlite
+import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
-from _helpers import configure_logging, set_scenario_config
+from atlite.gis import shape_availability
+from rasterio.plot import show
 
+from scripts._helpers import configure_logging, load_cutout, set_scenario_config
+
+# Variable spatial resolution: cache and region loading
 from wake_helpers import (
     get_offshore_mods,
     get_threshold,
@@ -95,10 +83,10 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_renewable_profiles", clusters=100, technology="onwind"
+            "determine_availability_matrix", clusters="adm", technology="offwind-dc"
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
@@ -109,151 +97,130 @@ if __name__ == "__main__":
     technology = snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
-    # Variable spatial resolution: cache and region loading
-    clusters = snakemake.wildcards.clusters
-
+    # Variable spatial resolution: cache lookup
     mods = get_offshore_mods(snakemake.config)
-    wdir = get_wake_dir(mods)
-
-    # Wind techs use onshore/offshore thresholds; for non-wind you can still call
-    # get_threshold only if you want wind-only caching. Most workflows do this only for wind.
+    clusters = snakemake.wildcards.clusters
     threshold = (
         get_threshold(mods, technology)
-        if "wind" in technology
-        else int(mods.get("onshore_threshold", 0))
+        if technology.startswith(("onwind", "offwind"))
+        else None
     )
-
-    cache_path = availability_cache_path(
-        wake_dir=wdir,
-        clusters=clusters,
-        technology=technology,
-        threshold=threshold,
-    )
+    wake_dir = get_wake_dir(mods)
+    cache_path = availability_cache_path(wake_dir, clusters, technology, threshold)
 
     if cache_path.is_file():
+        logger.info(f"Loading cached availability matrix from {cache_path}")
         availability = xr.open_dataarray(cache_path)
-    else:
-        cutout = atlite.Cutout(snakemake.input.cutout)
+        availability.to_netcdf(snakemake.output[0])
+        raise SystemExit(0)
 
-        regions = load_regions(
-            technology=technology,
-            threshold=threshold,
-            wake_dir=wdir,
-            fallback_path=snakemake.input.regions,
-        )
-
-        assert not regions.empty, (
-            f"List of regions in {snakemake.input.regions} is empty, please "
-            "disable the corresponding renewable technology"
-        )
-
-        # do not pull up, set_index does not work if geo dataframe is empty
+    cutout = load_cutout(snakemake.input.cutout)
+    regions = load_regions(
+        technology, threshold, wake_dir, snakemake.input.regions
+    )
+    if not isinstance(regions.index, pd.RangeIndex):
+        pass  # already indexed
+    elif "name" in regions.columns:
         regions = regions.set_index("name").rename_axis("bus")
 
-        res = params.get("excluder_resolution", 100)
-        excluder = atlite.ExclusionContainer(crs=3035, res=res)
+    assert not regions.empty, (
+        f"List of regions in {snakemake.input.regions} is empty, please "
+        "disable the corresponding renewable technology"
+    )
 
-        if params["natura"]:
-            excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
+    res = params.get("excluder_resolution", 100)
+    excluder = atlite.ExclusionContainer(crs=3035, res=res)
 
-        # added allow overlap true to prevent errors in case no overlap between
-        # excluder and cutout regions
-        for dataset in ["corine", "luisa"]:
-            kwargs = {"nodata": 0} if dataset == "luisa" else {}
-            settings = params.get(dataset, {})
-            if not settings:
-                continue
-            if dataset == "luisa" and res > 50:
-                logger.info(
-                    "LUISA data is available at 50m resolution, "
-                    f"but coarser {res}m resolution is used."
-                )
-            if isinstance(settings, list):
-                settings = {"grid_codes": settings}
-            if "grid_codes" in settings:
-                codes = settings["grid_codes"]
-                excluder.add_raster(
-                    snakemake.input[dataset],
-                    codes=codes,
-                    invert=True,
-                    crs=3035,
-                    allow_no_overlap=True,
-                    **kwargs,
-                )
-            if settings.get("distance", 0.0) > 0.0:
-                codes = settings["distance_grid_codes"]
-                buffer = settings["distance"]
-                excluder.add_raster(
-                    snakemake.input[dataset],
-                    codes=codes,
-                    buffer=buffer,
-                    crs=3035,
-                    allow_no_overlap=True,
-                    **kwargs,
-                )
+    if params["natura"]:
+        excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
 
-        if params.get("ship_threshold"):
-            shipping_threshold = (
-                params["ship_threshold"] * 8760 * 6
-            )  # approximation because 6 years of data which is hourly collected
-            func = functools.partial(np.less, shipping_threshold)
+    for dataset in ["corine", "luisa"]:
+        kwargs = {"nodata": 0} if dataset == "luisa" else {}
+        settings = params.get(dataset, {})
+        if not settings:
+            continue
+        if dataset == "luisa" and res > 50:
+            logger.info(
+                "LUISA data is available at 50m resolution, "
+                f"but coarser {res}m resolution is used."
+            )
+        if isinstance(settings, list):
+            settings = {"grid_codes": settings}
+        if "grid_codes" in settings:
+            codes = settings["grid_codes"]
             excluder.add_raster(
-                snakemake.input.ship_density,
-                codes=func,
-                crs=4326,
-                allow_no_overlap=True,
+                snakemake.input[dataset], codes=codes, invert=True, crs=3035, allow_no_overlap=True, **kwargs
             )
-
-        if params.get("max_depth"):
-            func = functools.partial(np.greater, -params["max_depth"])
+        if settings.get("distance", 0.0) > 0.0:
+            codes = settings["distance_grid_codes"]
+            buffer = settings["distance"]
             excluder.add_raster(
-                snakemake.input.gebco,
-                codes=func,
-                crs=4326,
-                nodata=-1000,
-                allow_no_overlap=True,
+                snakemake.input[dataset], codes=codes, buffer=buffer, crs=3035, allow_no_overlap=True, **kwargs
             )
 
-        if params.get("min_depth"):
-            func = functools.partial(np.greater, -params["min_depth"])
-            excluder.add_raster(
-                snakemake.input.gebco,
-                codes=func,
-                crs=4326,
-                nodata=-1000,
-                invert=True,
-                allow_no_overlap=True,
-            )
-
-        if "min_shore_distance" in params:
-            buffer = params["min_shore_distance"]
-            excluder.add_geometry(snakemake.input.country_shapes, buffer=buffer)
-
-        if "max_shore_distance" in params:
-            buffer = params["max_shore_distance"]
-            excluder.add_geometry(
-                snakemake.input.country_shapes, buffer=buffer, invert=True
-            )
-
-        logger.info(f"Calculate landuse availability for {technology}...")
-        start = time.time()
-
-        kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
-        availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
-
-        duration = time.time() - start
-        logger.info(
-            f"Completed landuse availability calculation for {technology} ({duration:2.2f}s)"
+    if params.get("ship_threshold"):
+        shipping_threshold = (
+            params["ship_threshold"] * 8760 * 6
+        )  # approximation because 6 years of data which is hourly collected
+        func = functools.partial(np.less, shipping_threshold)
+        excluder.add_raster(
+            snakemake.input.ship_density, codes=func, crs=4326, allow_no_overlap=True
         )
 
-        # For Moldova and Ukraine: Overwrite parts not covered by Corine with
-        # externally determined available areas
-        if "availability_matrix_MD_UA" in snakemake.input.keys():
-            availability_MDUA = xr.open_dataarray(
-                snakemake.input["availability_matrix_MD_UA"]
-            )
-            availability.loc[availability_MDUA.coords] = availability_MDUA
+    if params.get("max_depth"):
+        # lambda not supported for atlite + multiprocessing
+        # use named function np.greater with partially frozen argument instead
+        # and exclude areas where: -max_depth > grid cell depth
+        func = functools.partial(np.greater, -params["max_depth"])
+        excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000, allow_no_overlap=True)
 
-        availability.to_netcdf(cache_path)
+    if params.get("min_depth"):
+        func = functools.partial(np.greater, -params["min_depth"])
+        excluder.add_raster(
+            snakemake.input.gebco, codes=func, crs=4326, nodata=-1000, invert=True, allow_no_overlap=True
+        )
+
+    if params.get("min_shore_distance") is not None:
+        buffer = params["min_shore_distance"]
+        excluder.add_geometry(snakemake.input.country_shapes, buffer=buffer)
+
+    if params.get("max_shore_distance") is not None:
+        buffer = params["max_shore_distance"]
+        excluder.add_geometry(
+            snakemake.input.country_shapes, buffer=buffer, invert=True
+        )
+
+    logger.info(f"Calculate landuse availability for {technology}...")
+    start = time.time()
+
+    kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
+    availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
+
+    duration = time.time() - start
+    logger.info(
+        f"Completed landuse availability calculation for {technology} ({duration:2.2f}s)"
+    )
+
+    if params.get("plot_availability_matrix", False):
+        logger.info(f"Plotting landuse availability matrix for {technology}.")
+        band, transform = shape_availability(
+            regions.geometry.to_crs(excluder.crs), excluder
+        )
+        fig, ax = plt.subplots(figsize=(10, 10))
+        regions.to_crs(excluder.crs).plot(ax=ax, color="none")
+        show(band, transform=transform, cmap="Greens", ax=ax)
+        plt.savefig(snakemake.output[0].replace(".nc", ".png"), dpi=300)
+
+    # For Moldova and Ukraine: Overwrite parts not covered by Corine with
+    # externally determined available areas
+    if "availability_matrix_MD_UA" in snakemake.input.keys():
+        availability_MDUA = xr.open_dataarray(
+            snakemake.input["availability_matrix_MD_UA"]
+        )
+        availability.loc[availability_MDUA.coords] = availability_MDUA
+
+    # Save to cache
+    logger.info(f"Caching availability matrix to {cache_path}")
+    availability.to_netcdf(cache_path)
 
     availability.to_netcdf(snakemake.output[0])

@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -13,18 +12,21 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, set_scenario_config
-from plot_power_network import assign_location, load_projection
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
+
+from scripts._helpers import configure_logging, retry, set_scenario_config
+from scripts.make_summary import assign_locations
+from scripts.plot_power_network import load_projection
 
 logger = logging.getLogger(__name__)
 
 
+@retry
 def plot_ch4_map(n):
     # if "gas pipeline" not in n.links.carrier.unique():
     #     return
 
-    assign_location(n)
+    assign_locations(n)
 
     bus_size_factor = 8e7
     linewidth_factor = 1e4
@@ -85,21 +87,25 @@ def plot_ch4_map(n):
     # make a fake MultiIndex so that area is correct for legend
     biogas.index = pd.MultiIndex.from_product([biogas.index, ["biogas"]])
 
-    bus_sizes = pd.concat([fossil_gas, methanation, biogas])
-    bus_sizes.sort_index(inplace=True)
+    bus_size = pd.concat([fossil_gas, methanation, biogas])
+    non_buses = bus_size.index.unique(level=0).difference(n.buses.index)
+    if any(non_buses):
+        logger.info(f"Dropping non-buses {non_buses.tolist()} for CH4 network plot.")
+        bus_size = bus_size.drop(non_buses)
+    bus_size.sort_index(inplace=True)
 
     to_remove = n.links.index[~n.links.carrier.str.contains("gas pipeline")]
     n.links.drop(to_remove, inplace=True)
 
-    link_widths_rem = n.links.p_nom_opt / linewidth_factor
-    link_widths_rem[n.links.p_nom_opt < line_lower_threshold] = 0.0
+    link_width_rem = n.links.p_nom_opt / linewidth_factor
+    link_width_rem[n.links.p_nom_opt < line_lower_threshold] = 0.0
 
-    link_widths_orig = n.links.p_nom / linewidth_factor
-    link_widths_orig[n.links.p_nom < line_lower_threshold] = 0.0
+    link_width_orig = n.links.p_nom / linewidth_factor
+    link_width_orig[n.links.p_nom < line_lower_threshold] = 0.0
 
     max_usage = n.links_t.p0[n.links.index].abs().max(axis=0)
-    link_widths_used = max_usage / linewidth_factor
-    link_widths_used[max_usage < line_lower_threshold] = 0.0
+    link_width_used = max_usage / linewidth_factor
+    link_width_used[max_usage < line_lower_threshold] = 0.0
 
     tech_colors = snakemake.params.plotting["tech_colors"]
 
@@ -115,7 +121,7 @@ def plot_ch4_map(n):
     n.links.bus0 = n.links.bus0.str.replace(" gas", "")
     n.links.bus1 = n.links.bus1.str.replace(" gas", "")
 
-    bus_colors = {
+    bus_color = {
         "fossil gas": tech_colors["fossil gas"],
         "methanation": tech_colors["methanation"],
         "biogas": "seagreen",
@@ -124,10 +130,10 @@ def plot_ch4_map(n):
     fig, ax = plt.subplots(figsize=(7, 6), subplot_kw={"projection": proj})
 
     n.plot(
-        bus_sizes=bus_sizes,
-        bus_colors=bus_colors,
-        link_colors=pipe_colors["gas pipeline (in 2020)"],
-        link_widths=link_widths_orig,
+        bus_size=bus_size,
+        bus_color=bus_color,
+        link_color=pipe_colors["gas pipeline (in 2020)"],
+        link_width=link_width_orig,
         branch_components=["Link"],
         ax=ax,
         **map_opts,
@@ -135,21 +141,21 @@ def plot_ch4_map(n):
 
     n.plot(
         ax=ax,
-        bus_sizes=0.0,
-        link_colors=pipe_colors["gas pipeline (available)"],
-        link_widths=link_widths_rem,
+        bus_size=0.0,
+        link_color=pipe_colors["gas pipeline (available)"],
+        link_width=link_width_rem,
         branch_components=["Link"],
-        color_geomap=False,
+        geomap_color=False,
         boundaries=map_opts["boundaries"],
     )
 
     n.plot(
         ax=ax,
-        bus_sizes=0.0,
-        link_colors=link_color_used,
-        link_widths=link_widths_used,
+        bus_size=0.0,
+        link_color=link_color_used,
+        link_width=link_width_used,
         branch_components=["Link"],
-        color_geomap=False,
+        geomap_color=False,
         boundaries=map_opts["boundaries"],
     )
 
@@ -197,8 +203,8 @@ def plot_ch4_map(n):
         legend_kw=legend_kw,
     )
 
-    colors = list(pipe_colors.values()) + list(bus_colors.values())
-    labels = list(pipe_colors.keys()) + list(bus_colors.keys())
+    colors = list(pipe_colors.values()) + list(bus_color.values())
+    labels = list(pipe_colors.keys()) + list(bus_color.keys())
 
     # legend on the side
     # legend_kw = dict(
@@ -226,13 +232,12 @@ def plot_ch4_map(n):
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "plot_gas_network",
             opts="",
             clusters="37",
-            ll="v1.0",
             sector_opts="4380H-T-H-B-I-A-dist1",
         )
 

@@ -1,16 +1,20 @@
-# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: CC0-1.0
 
 master
 
+.env
+
 .snakemake*
 .ipynb_checkpoints
 __pycache__
+*.egg-info
 *dconf
 gurobi.log
 .vscode
 *.orig
+.idea
 
 /bak
 /resources
@@ -20,10 +24,11 @@ gurobi.log
 /benchmarks
 /logs
 /notebooks
-/data
+/data/*
 /cutouts
 /tmp
 doc/_build
+_build
 
 /scripts/old
 /scripts/create_scenarios.py
@@ -32,10 +37,6 @@ doc/_build
 config/config.yaml
 config/scenarios.yaml
 
-config.yaml
-config/config.yaml
-
-dconf
 /data/links_p_nom.csv
 /data/*totals.csv
 /data/biomass*
@@ -48,64 +49,44 @@ dconf
 /data/transport_data.csv
 /data/.nfs*
 /data/retro/*
-/data/bundle/nuts*
 data/gas_network/scigrid-gas/
 data/costs_*.csv
+!/data/custom_costs.csv
 
 dask-worker-space/
 publications.jrc.ec.europa.eu/
 d1gam3xoknrgr2.cloudfront.net/
 
 *.org
+
 *.nc
+
 *~
+
+*.egg-info
+
 *.pyc
+
 *.xlsx
+
 *.xls
+
 *.geojson
+
 *.ipynb
 
 merger-todos.md
+
 *.html
-/plots
-.DS_Store
 
-*~
-*.py[cod]
-.~*
-__pycache__
-.ipynb_checkpoints
-doc/_build/
-build/
-dist/
-.eggs
-atlite.egg-info/
-doc/.vscode/settings.json
-.vscode/settings.json
-test/*.nc
-dev-scripts/
-examples/*.nc
-examples/*.csv
-examples/*.zip
-examples/*.tif
-atlite/version.py
-paper
-.coverage*
-!.coveragerc
+# private dev folder
+dev/*
 
-# Ignore PyCharm / JetBrains IDE project files
-.idea/
-examples/Helsinki-Vantaa_2012.ipynb
-.DS_Store
-/results-working
-.DS_Store
-/images
-*.png
-/analysis_scripts/data
-/wake_extra-working
-/config/manuscript
-/.claude
-/analysis_scripts
-/analysis_scripts
-IMPROVEMENTS.md
-THESIS_CHAPTER_ANALYSIS.md
+# ai coding tools
+CLAUDE.md
+.claude/
+.github/copilot-instructions.md
+CLAUDE.local.md
+# pixi environments
+.pixi/*
+!.pixi/config.toml

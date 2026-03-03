@@ -1,7 +1,6 @@
+.. SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 ..
-  SPDX-FileCopyrightText: 2019-2024 The PyPSA-Eur Authors
-
-  SPDX-License-Identifier: CC-BY-4.0
+.. SPDX-License-Identifier: CC-BY-4.0
 
 .. _installation:
 
@@ -27,32 +26,60 @@ First of all, clone the `PyPSA-Eur repository <https://github.com/PyPSA/pypsa-eu
 Install Python Dependencies
 ===============================
 
-PyPSA-Eur relies on a set of other Python packages to function.
-We recommend using the package manager `mamba <https://mamba.readthedocs.io/en/latest/>`__
-to install them and manage your environments. For instructions for your operating
-system follow the ``mamba`` `installation guide <https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html>`__.
-You can also use ``conda`` equivalently.
+Preferred method: ``pixi``
+--------------------------
 
-The package requirements are curated in the ``envs/environment.yaml`` file.
-There are also regularly updated pinned environment files for each operating system to
-ensure reproducibility (``envs/windows-pinned.yaml``, ``envs/linux-pinned.yaml``, ``envs/macos-pinned.yaml``).
-We recommend to use the pinned files for a stable environment, but you could also use
-the unpinned file.
+PyPSA-Eur relies on a set of other Python packages to function.
+We manage these using `pixi <https://pixi.sh/latest/>`_.
+Once pixi is installed, you can activate the project environment for your operating system and have access to all the PyPSA-Eur dependencies from the command line:
 
 .. code:: console
 
-    $ mamba env create -f envs/linux-pinned.yaml # replace for your os
+    $ pixi shell
 
-    $ mamba activate pypsa-eur
+.. tip::
+    You can also set up automatic shell activation in several popular editors (e.g. in `VSCode <https://pixi.sh/dev/integration/editor/vscode/>`_ or `Zed <https://pixi.sh/dev/integration/editor/zed/>`_).
+    Refer to the ``pixi`` documentation for the most up-to-date options.
 
 .. note::
-    The equivalent commands for ``conda`` would be
+    We don't currently support linux operating systems using ARM processors since certain packages, such as ``PySCIPOpt``, require being built from source.
 
-    .. code:: console
+Legacy method: ``conda``
+------------------------
 
-        $ conda env create -f envs/linux-pinned.yaml # replace for your os
+If you cannot access ``pixi`` on your machine, you can also install using `conda <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_ (or ``mamba``/``micromamba``).
+To do so, we highly recommend you install from one of our platform-specific environment files:
 
-        $ conda activate pypsa-eur
+* For Intel/AMD processors:
+
+  - Linux: ``envs/default_linux-64.pin.txt``
+  - macOS: ``envs/default_osx-64.pin.txt``
+  - Windows: ``envs/default_win-64.pin.txt``
+
+* For ARM processors:
+
+  - macOS (Apple Silicon): ``envs/default_osx-arm64.pin.txt``
+  - Linux (ARM): Currently not supported via lock files; requires building certain packages, such as ``PySCIPOpt``, from source
+
+.. code:: console
+
+    $ conda update conda
+
+    $ conda create -n pypsa-eur -f envs/default_linux-64.pin.txt # select the appropriate file for your platform
+
+    $ conda activate pypsa-eur
+
+
+These platform-specific files have locked dependencies, to ensure reproducibility.
+If you are having difficulties with the above files, you can also install directly from the un-locked environment YAML file (not recommended):
+
+.. code:: console
+
+    $ conda update conda
+
+    $ conda env create -f envs/environment.yaml
+
+    $ conda activate pypsa-eur
 
 
 Install a Solver
@@ -81,32 +108,39 @@ Nevertheless, you can still use open-source solvers for smaller problems.
     `Instructions how to install a solver in the documentation of PyPSA <https://pypsa.readthedocs.io/en/latest/installation.html#getting-a-solver-for-linear-optimisation>`__
 
 .. note::
-    The rules :mod:`cluster_network` and :mod:`simplify_network` solve a mixed-integer quadratic optimisation problem for clustering.
+    The rules :mod:`cluster_network` solves a mixed-integer quadratic optimisation problem for clustering.
     The open-source solvers HiGHS, Cbc and GlPK cannot handle this. A fallback to SCIP is implemented in this case, which is included in the standard environment specifications.
     For an open-source solver setup install for example HiGHS **and** SCIP in your ``conda`` environment on OSX/Linux.
+
     To install the default solver Gurobi, run
 
     .. code:: console
 
-        $ mamba activate pypsa-eur
-        $ mamba install -c gurobi gurobi
+        $ conda activate pypsa-eur
+        $ conda install -c gurobi gurobi"=12.0.1"
 
     Additionally, you need to setup your `Gurobi license <https://www.gurobi.com/solutions/licensing/>`__.
 
+    To use Xpress, install the ``xpress`` Python package and ensure you have:
 
-.. _defaultconfig:
+    - ``XPRESSDIR`` environment variable pointing to your Xpress installation
+    - ``XPAUTH_PATH`` environment variable pointing to your license directory
+    - A valid Xpress license file
 
-Handling Configuration Files
-============================
+    Then configure the solver in your config file:
 
-PyPSA-Eur has several configuration options that users can specify in a
-``config/config.yaml`` file. The default configuration
-``config/config.default.yaml`` is maintained in the repository. More details on
-the configuration options are in :ref:`config`.
+    .. code:: yaml
 
-You can also use ``snakemake`` to specify another file, e.g.
-``config/config.mymodifications.yaml``, to update the settings of the ``config/config.yaml``.
+        solving:
+          solver:
+            name: xpress
+            options: xpress-default
 
-.. code:: console
+    For GPU-accelerated solving, use:
 
-    $ snakemake -call --configfile config/config.mymodifications.yaml
+    .. code:: yaml
+
+        solving:
+          solver:
+            name: xpress
+            options: xpress-gpu

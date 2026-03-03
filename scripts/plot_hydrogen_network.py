@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -13,9 +12,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, set_scenario_config
-from plot_power_network import assign_location, load_projection
 from pypsa.plot import add_legend_circles, add_legend_lines, add_legend_patches
+
+from scripts._helpers import configure_logging, retry, set_scenario_config
+from scripts.make_summary import assign_locations
+from scripts.plot_power_network import load_projection
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,14 @@ def group_pipes(df, drop_direction=False):
     )
 
 
+@retry
 def plot_h2_map(n, regions):
     # if "H2 pipeline" not in n.links.carrier.unique():
     #     return
 
-    assign_location(n)
+    assign_locations(n)
 
-    h2_storage = n.stores.query("carrier == 'H2'")
+    h2_storage = n.stores.query("carrier == 'H2 Store'")
     regions["H2"] = (
         h2_storage.rename(index=h2_storage.bus.map(n.buses.location))
         .e_nom_opt.groupby(level=0)
@@ -70,13 +72,13 @@ def plot_h2_map(n, regions):
 
     elec = n.links[n.links.carrier.isin(carriers)].index
 
-    bus_sizes = (
+    bus_size = (
         n.links.loc[elec, "p_nom_opt"].groupby([n.links["bus0"], n.links.carrier]).sum()
         / bus_size_factor
     )
 
     # make a fake MultiIndex so that area is correct for legend
-    bus_sizes.rename(index=lambda x: x.replace(" H2", ""), level=0, inplace=True)
+    bus_size.rename(index=lambda x: x.replace(" H2", ""), level=0, inplace=True)
     # drop all links which are not H2 pipelines
     n.links.drop(
         n.links.index[~n.links.carrier.str.contains("H2 pipeline")], inplace=True
@@ -125,7 +127,7 @@ def plot_h2_map(n, regions):
     else:
         h2_total = h2_new.p_nom_opt
 
-    link_widths_total = h2_total / linewidth_factor
+    link_width_total = h2_total / linewidth_factor
 
     n.links.rename(index=lambda x: x.split("-2")[0], inplace=True)
     # group links by summing up p_nom values and taking the first value of the rest of the columns
@@ -134,14 +136,14 @@ def plot_h2_map(n, regions):
         {"p_nom_opt": "sum", "p_nom": "sum", **other_cols}
     )
 
-    link_widths_total = link_widths_total.reindex(n.links.index).fillna(0.0)
-    link_widths_total[n.links.p_nom_opt < line_lower_threshold] = 0.0
+    link_width_total = link_width_total.reindex(n.links.index).fillna(0.0)
+    link_width_total[n.links.p_nom_opt < line_lower_threshold] = 0.0
 
     retro = n.links.p_nom_opt.where(
         n.links.carrier == "H2 pipeline retrofitted", other=0.0
     )
-    link_widths_retro = retro / linewidth_factor
-    link_widths_retro[n.links.p_nom_opt < line_lower_threshold] = 0.0
+    link_width_retro = retro / linewidth_factor
+    link_width_retro[n.links.p_nom_opt < line_lower_threshold] = 0.0
 
     n.links.bus0 = n.links.bus0.str.replace(" H2", "")
     n.links.bus1 = n.links.bus1.str.replace(" H2", "")
@@ -153,14 +155,14 @@ def plot_h2_map(n, regions):
     color_h2_pipe = "#b3f3f4"
     color_retrofit = "#499a9c"
 
-    bus_colors = {"H2 Electrolysis": "#ff29d9", "H2 Fuel Cell": "#805394"}
+    bus_color = {"H2 Electrolysis": "#ff29d9", "H2 Fuel Cell": "#805394"}
 
     n.plot(
         geomap=True,
-        bus_sizes=bus_sizes,
-        bus_colors=bus_colors,
-        link_colors=color_h2_pipe,
-        link_widths=link_widths_total,
+        bus_size=bus_size,
+        bus_color=bus_color,
+        link_color=color_h2_pipe,
+        link_width=link_width_total,
         branch_components=["Link"],
         ax=ax,
         **map_opts,
@@ -168,9 +170,9 @@ def plot_h2_map(n, regions):
 
     n.plot(
         geomap=True,
-        bus_sizes=0,
-        link_colors=color_retrofit,
-        link_widths=link_widths_retro,
+        bus_size=0,
+        link_color=color_retrofit,
+        link_width=link_width_retro,
         branch_components=["Link"],
         ax=ax,
         **map_opts,
@@ -233,7 +235,7 @@ def plot_h2_map(n, regions):
         legend_kw=legend_kw,
     )
 
-    colors = [bus_colors[c] for c in carriers] + [color_h2_pipe, color_retrofit]
+    colors = [bus_color[c] for c in carriers] + [color_h2_pipe, color_retrofit]
     labels = carriers + ["H2 pipeline (total)", "H2 pipeline (repurposed)"]
 
     legend_kw = dict(
@@ -253,13 +255,12 @@ def plot_h2_map(n, regions):
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "plot_hydrogen_network",
             opts="",
             clusters="37",
-            ll="v1.0",
             sector_opts="4380H-T-H-B-I-A-dist1",
         )
 

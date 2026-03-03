@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -12,9 +11,10 @@ import logging
 
 import geopandas as gpd
 import pandas as pd
-from _helpers import configure_logging, set_scenario_config
 from pypsa.geo import haversine_pts
 from shapely.geometry import Point
+
+from scripts._helpers import configure_logging, set_scenario_config
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,16 @@ def diameter_to_capacity(pipe_diameter_mm):
         return a3 + m3 * pipe_diameter_mm
 
 
+def unnest_struct(s):
+    if isinstance(s.iloc[0], str):
+        s = s.apply(json.loads)
+    return s.apply(pd.Series)
+
+
 def load_dataset(fn):
     df = gpd.read_file(fn)
-    param = df.param.apply(json.loads).apply(pd.Series)
-    cols = ["diameter_mm", "max_cap_M_m3_per_d"]
-    method = df.method.apply(json.loads).apply(pd.Series)[cols]
+    param = unnest_struct(df.param)
+    method = unnest_struct(df.method)[["diameter_mm", "max_cap_M_m3_per_d"]]
     method.columns = method.columns + "_method"
     df = pd.concat([df, param, method], axis=1)
     to_drop = ["param", "uncertainty", "method", "tags"]
@@ -142,7 +147,7 @@ def prepare_dataset(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake("build_gas_network")
 

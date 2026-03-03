@@ -1,28 +1,8 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
 Build best case specific energy consumption by carrier and category.
-
-Relevant Settings
------------------
-
-.. code:: yaml
-
-    industry:
-        ammonia:
-..
-
-Inputs
--------
-- ``resources/ammonia_production.csv``
-- ``data/bundle-sector/jrc-idees-2021``
-
-Outputs
--------
-
-- ``resources/industry_sector_ratios.csv``
 
 Description
 -------
@@ -48,9 +28,15 @@ If the `config["industry"]["ammonia"] <https://pypsa-eur.readthedocs.io/en/lates
 The unit of the specific energy consumption is MWh/t material and tCO2/t material for process emissions.
 """
 
+import logging
+from pathlib import Path
+
 import country_converter as coco
 import pandas as pd
-from _helpers import mute_print, set_scenario_config
+
+from scripts._helpers import configure_logging, mute_print, set_scenario_config
+
+logger = logging.getLogger(__name__)
 
 cc = coco.CountryConverter()
 
@@ -98,9 +84,16 @@ def load_idees_data(sector, country="EU27"):
     def usecols(x):
         return isinstance(x, str) or x == year
 
+    root = Path(snakemake.input.idees, country)
+    fn = next(
+        p
+        for y in ("2023", "2021")
+        if (p := root / f"JRC-IDEES-{y}_Industry_{country}.xlsx").exists()
+    )
+
     with mute_print():
         idees = pd.read_excel(
-            f"{snakemake.input.idees}/{country}/JRC-IDEES-2021_Industry_{country}.xlsx",
+            fn,
             sheet_name=list(sheets.values()),
             index_col=0,
             header=0,
@@ -1393,9 +1386,8 @@ def textiles_and_leather():
     df.loc["heat", sector] += s_fec["Low-enthalpy heat"]
 
     # Efficiency changes due to electrification
-    key = "Textiles: Electric drying"
     # in new JRC data zero assume old data
-    # eff_elec = s_ued[key] / s_fec[key]
+
     eff_elec = 73.7 / 146.6
     df.loc["elec", sector] += s_ued["Textiles: Drying"] / eff_elec
 
@@ -1469,7 +1461,6 @@ def wood_and_wood_products():
 
 
 def other_industrial_sectors():
-
     sector = "Other industrial sectors"
     idees = load_idees_data(sector)
 
@@ -1530,9 +1521,10 @@ def other_industrial_sectors():
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake("build_industry_sector_ratios")
+    configure_logging(snakemake)
     set_scenario_config(snakemake)
 
     params = snakemake.params.industry

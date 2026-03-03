@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>>
 #
 # SPDX-License-Identifier: MIT
 """
@@ -13,20 +12,23 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pypsa
-from _helpers import configure_logging, set_scenario_config
-from plot_power_network import assign_location, load_projection, rename_techs_tyndp
-from plot_summary import preferred_order
 from pypsa.plot import add_legend_circles, add_legend_lines
+
+from scripts._helpers import configure_logging, retry, set_scenario_config
+from scripts.make_summary import assign_locations
+from scripts.plot_power_network import load_projection, rename_techs_tyndp
+from scripts.plot_summary import preferred_order
 
 logger = logging.getLogger(__name__)
 
 
+@retry
 def plot_map_perfect(
     n,
     components=["Link", "Store", "StorageUnit", "Generator"],
     bus_size_factor=2e10,
 ):
-    assign_location(n)
+    assign_locations(n)
     # Drop non-electric buses so they don't clutter the plot
     n.buses.drop(n.buses.index[n.buses.carrier != "AC"], inplace=True)
     # investment periods
@@ -34,7 +36,7 @@ def plot_map_perfect(
 
     costs = {}
     for comp in components:
-        df_c = n.df(comp)
+        df_c = n.components[comp].static
         if df_c.empty:
             continue
         df_c["nice_group"] = df_c.carrier.map(rename_techs_tyndp)
@@ -45,10 +47,17 @@ def plot_map_perfect(
             [n.get_active_assets(comp, inv_p).rename(inv_p) for inv_p in investments],
             axis=1,
         ).astype(int)
-        capital_cost = n.df(comp)[attr] * n.df(comp).capital_cost
+        capital_cost = (
+            n.components[comp].static[attr] * n.components[comp].static.capital_cost
+        )
         capital_cost_t = (
             (active.mul(capital_cost, axis=0))
-            .groupby([n.df(comp).location, n.df(comp).nice_group])
+            .groupby(
+                [
+                    n.components[comp].static.location,
+                    n.components[comp].static.nice_group,
+                ]
+            )
             .sum()
         )
 
@@ -94,17 +103,17 @@ def plot_map_perfect(
     ac_color = "gray"
     dc_color = "m"
 
-    line_widths = n.lines.s_nom_opt
-    link_widths = n.links.p_nom_opt
+    line_width = n.lines.s_nom_opt
+    link_width = n.links.p_nom_opt
     linewidth_factor = 2e3
     line_lower_threshold = 0.0
     title = "Today's transmission"
 
-    line_widths[line_widths < line_lower_threshold] = 0.0
-    link_widths[link_widths < line_lower_threshold] = 0.0
+    line_width[line_width < line_lower_threshold] = 0.0
+    link_width[link_width < line_lower_threshold] = 0.0
 
-    line_widths[line_widths > line_upper_threshold] = line_upper_threshold
-    link_widths[link_widths > line_upper_threshold] = line_upper_threshold
+    line_width[line_width > line_upper_threshold] = line_upper_threshold
+    link_width[link_width > line_upper_threshold] = line_upper_threshold
 
     for year in costs.columns:
         fig, ax = plt.subplots(subplot_kw={"projection": proj})
@@ -112,12 +121,12 @@ def plot_map_perfect(
         fig.suptitle(year)
 
         n.plot(
-            bus_sizes=costs[year] / bus_size_factor,
-            bus_colors=snakemake.config["plotting"]["tech_colors"],
-            line_colors=ac_color,
-            link_colors=dc_color,
-            line_widths=line_widths / linewidth_factor,
-            link_widths=link_widths / linewidth_factor,
+            bus_size=costs[year] / bus_size_factor,
+            bus_color=snakemake.config["plotting"]["tech_colors"],
+            line_color=ac_color,
+            link_color=dc_color,
+            line_width=line_width / linewidth_factor,
+            link_width=link_width / linewidth_factor,
             ax=ax,
             **map_opts,
         )
@@ -173,13 +182,12 @@ def plot_map_perfect(
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
             "plot_power_network_perfect",
             opts="",
             clusters="37",
-            ll="v1.0",
             sector_opts="4380H-T-H-B-I-A-dist1",
         )
 

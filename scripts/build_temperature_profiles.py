@@ -1,118 +1,101 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
 Build time series for air and soil temperatures per clustered model region.
 
-Uses ``atlite.Cutout.temperature`` and ``atlite.Cutout.soil_temperature``.
-Executed in ``build_sector.smk``.
+Uses ``atlite.Cutout.temperature`` and ``atlite.Cutout.soil_temperature compute temperature ambient air and soil temperature for the respective cutout. The rule is executed in ``build_sector.smk``.
 
-This version adds wake-shared caching under:
-    wake_extra/<shared_files>/temperature/
+
+.. seealso::
+    `Atlite.Cutout.temperature <https://atlite.readthedocs.io/en/master/ref_api.html#module-atlite.convert>`_
+    `Atlite.Cutout.soil_temperature <https://atlite.readthedocs.io/en/master/ref_api.html#module-atlite.convert>`_
+
 """
 
-import atlite
+import logging
+
 import geopandas as gpd
 import numpy as np
 import xarray as xr
-from pathlib import Path
-from _helpers import get_snapshots, set_scenario_config
 from dask.distributed import Client, LocalCluster
 
+from scripts._helpers import (
+    configure_logging,
+    get_snapshots,
+    load_cutout,
+    set_scenario_config,
+)
+
+# Variable spatial resolution: caching
 from wake_helpers import get_offshore_mods, get_wake_dir, temperature_cache_paths
 
-# -----------------------------------------------------------------------------
-# main
-# -----------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
-        snakemake = mock_snakemake("build_temperature_profiles", clusters=48)
-
+        snakemake = mock_snakemake(
+            "build_temperature_profiles",
+            clusters=48,
+        )
+    configure_logging(snakemake)
     set_scenario_config(snakemake)
 
-    # ---------------- basic config ----------------
-    nprocesses = int(snakemake.threads)
-
-    clusters = int(getattr(snakemake.wildcards, "clusters", 0))
-    scope = getattr(snakemake.wildcards, "scope", "total")
-
-    time = get_snapshots(
-        snakemake.params.snapshots,
-        snakemake.params.drop_leap_day,
-    )
-
-    # ---------------- wake-shared cache root ----------------
+    # Cache lookup
     mods = get_offshore_mods(snakemake.config)
     wake_dir = get_wake_dir(mods)
+    clusters = snakemake.wildcards.clusters
+    cache_air, cache_soil = temperature_cache_paths(wake_dir=wake_dir, clusters=clusters)
 
-    cache_air, cache_soil = temperature_cache_paths(
-        wake_dir=wake_dir,
-        clusters=clusters,
-    )
-
-    # ---------------- CACHE HIT ----------------
     if cache_air.is_file() and cache_soil.is_file():
+        logger.info(f"Loading cached temperature profiles from {cache_air.parent}")
         xr.open_dataarray(cache_air).to_netcdf(snakemake.output.temp_air)
         xr.open_dataarray(cache_soil).to_netcdf(snakemake.output.temp_soil)
         raise SystemExit(0)
 
-    # ---------------- CACHE MISS: COMPUTE ----------------
+    nprocesses = int(snakemake.threads)
     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
-    client = Client(cluster)
+    client = Client(cluster, asynchronous=True)
 
-    try:
-        cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
+    time = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
 
-        clustered_regions = (
-            gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0)
-        )
+    cutout = load_cutout(snakemake.input.cutout, time=time)
 
-        I = cutout.indicatormatrix(clustered_regions)
+    clustered_regions = (
+        gpd.read_file(snakemake.input.regions_onshore).set_index("name").buffer(0)
+    )
 
-        pop_layout = xr.open_dataarray(snakemake.input.pop_layout)
-        stacked_pop = pop_layout.stack(spatial=("y", "x"))
+    I = cutout.indicatormatrix(clustered_regions)  # noqa: E741
 
-        M = I.T.dot(np.diag(I.dot(stacked_pop)))
-        nonzero_sum = M.sum(axis=0, keepdims=True)
-        nonzero_sum[nonzero_sum == 0.0] = 1.0
-        M_tilde = M / nonzero_sum
+    pop_layout = xr.open_dataarray(snakemake.input.pop_layout)
 
-        # ---- air temperature
-        temp_air = cutout.temperature(
-            matrix=M_tilde.T,
-            index=clustered_regions.index,
-            dask_kwargs=dict(scheduler=client),
-            show_progress=False,
-        )
+    stacked_pop = pop_layout.stack(spatial=("y", "x"))
+    M = I.T.dot(np.diag(I.dot(stacked_pop)))
 
-        # ---- soil temperature
-        temp_soil = cutout.soil_temperature(
-            matrix=M_tilde.T,
-            index=clustered_regions.index,
-            dask_kwargs=dict(scheduler=client),
-            show_progress=False,
-        )
+    nonzero_sum = M.sum(axis=0, keepdims=True)
+    nonzero_sum[nonzero_sum == 0.0] = 1.0
+    M_tilde = M / nonzero_sum
 
-        # ---- write cache
-        cache_air.parent.mkdir(parents=True, exist_ok=True)
-        temp_air.to_netcdf(cache_air)
-        temp_soil.to_netcdf(cache_soil)
+    temp_air = cutout.temperature(
+        matrix=M_tilde.T,
+        index=clustered_regions.index,
+        dask_kwargs=dict(scheduler=client),
+        show_progress=False,
+    )
 
-        # ---- write rule outputs
-        temp_air.to_netcdf(snakemake.output.temp_air)
-        temp_soil.to_netcdf(snakemake.output.temp_soil)
+    # Save to cache
+    logger.info(f"Caching temperature profiles to {cache_air.parent}")
+    temp_air.to_netcdf(cache_air)
+    temp_air.to_netcdf(snakemake.output.temp_air)
 
-    finally:
-        try:
-            client.close()
-        except Exception:
-            pass
-        try:
-            cluster.close()
-        except Exception:
-            pass
+    temp_soil = cutout.soil_temperature(
+        matrix=M_tilde.T,
+        index=clustered_regions.index,
+        dask_kwargs=dict(scheduler=client),
+        show_progress=False,
+    )
+
+    temp_soil.to_netcdf(cache_soil)
+    temp_soil.to_netcdf(snakemake.output.temp_soil)

@@ -1,142 +1,93 @@
-# pypsa-eur-wind  
-**Extended wind resource modelling for PyPSA-Eur**
+<!--
+SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
+SPDX-License-Identifier: CC-BY-4.0
+-->
 
-## Purpose of this fork
+[![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/pypsa/pypsa-eur?include_prereleases)](https://github.com/PyPSA/pypsa-eur/releases)
+[![Documentation](https://readthedocs.org/projects/pypsa-eur/badge/?version=latest)](https://pypsa-eur.readthedocs.io/en/latest/?badge=latest)
+[![Test workflows](https://github.com/pypsa/pypsa-eur/actions/workflows/test.yaml/badge.svg)](https://github.com/pypsa/pypsa-eur/actions/workflows/test.yaml)
+![Size](https://img.shields.io/github/repo-size/pypsa/pypsa-eur)
+[![Zenodo PyPSA-Eur](https://zenodo.org/badge/DOI/10.5281/zenodo.3520874.svg)](https://doi.org/10.5281/zenodo.3520874)
+[![Zenodo PyPSA-Eur-Sec](https://zenodo.org/badge/DOI/10.5281/zenodo.3938042.svg)](https://doi.org/10.5281/zenodo.3938042)
+[![Snakemake](https://img.shields.io/badge/snakemake-≥9-brightgreen.svg?style=flat)](https://snakemake.readthedocs.io)
+[![Discord](https://img.shields.io/discord/911692131440148490?logo=discord)](https://discord.gg/AnuJBk23FU)
+[![REUSE status](https://api.reuse.software/badge/github.com/pypsa/pypsa-eur)](https://api.reuse.software/info/github.com/pypsa/pypsa-eur)
 
-This repository is a research fork of the upstream
-[pypsa-eur](https://github.com/PyPSA/pypsa-eur) model, developed to support
-methodological work on **wind resource representation and uncertainty**
-for a doctoral thesis.
+# PyPSA-Eur: A Sector-Coupled Open Optimisation Model of the European Energy System
 
-The fork extends the standard PyPSA-Eur wind workflow with:
+PyPSA-Eur is an open model dataset of the European energy system at the
+transmission network level that covers the full ENTSO-E area and all energy sectors, including transport, heating, biomass, industry, and agriculture.
+Besides the power grid, pipeline networks for gas, hydrogen, carbon dioxide, and liquid fuels are included.
+The model is suitable both for planning studies and operational studies.
+The model is built from open data using a Snakemake workflow and fully open source.
+It is designed to be imported into the open-source energy system modelling framework [PyPSA](www.pypsa.org).
 
-1. **Configurable spatial resolution of wind resources**
-2. **A novel wake correction implementation**
-3. **Bias correction of wind resources using the PyVWF framework**
-
-The aim is to enable **controlled sensitivity analysis** of wind resource
-assumptions and their impact on power system modelling results.
-
-## Relationship to upstream pypsa-eur
-
-This repository **tracks the structure and philosophy of pypsa-eur**, but
-introduces additional functionality that is **not present upstream**.
-
-Unless stated otherwise:
-- All standard PyPSA-Eur workflows remain unchanged
-- Existing configuration files remain compatible
-- Extensions are optional and can be toggled via configuration
-
-This fork should be treated as **research software**, not a drop-in replacement
-for the official pypsa-eur repository.
-
-## Summary of methodological extensions
-
-### 1. Variable spatial resolution of wind resources
-
-This fork introduces the ability to **modify the spatial resolution** at which
-wind resources are represented, independently of the power system network
-resolution.
-
-This enables experiments such as:
-- Aggregating wind resources to finer grids
-- Preserving high-resolution wind fields while clustering generators
-- Quantifying sensitivity to spatial smoothing of wind variability
-
-This functionality is intended for **methodological comparison**, not
-operational forecasting.
-
-### 2. Wake correction implementation
-
-A novel wake correction approach is implemented to account for **wind farm
-interaction effects** that are not represented in the standard pypsa-eur
-workflow.
-
-Key characteristics:
-- Applied at the wind resource / capacity factor level
-- Designed to scale to national or continental systems
-- Explicitly configurable and reproducible
-
-The implementation is intended for system-level studies, not detailed
-micrositing.
+> [!NOTE]
+> PyPSA-Eur has many contributors, with the maintenance currently led by the [Department of Digital Transformation in
+> Energy Systems](https://tu.berlin/en/ensys) at the [Technical University of
+> Berlin](https://www.tu.berlin).
+> Previous versions were developed at the [Karlsruhe
+> Institute of Technology](http://www.kit.edu/english/index.php) funded by the
+> [Helmholtz Association](https://www.helmholtz.de/en/).
 
 
-### 3. Bias correction using PyVWF
+Among many other things, the dataset consists of:
 
-This fork integrates **bias correction of wind resources** using the
-**Python Virtual Wind Farm (PyVWF)** framework.
+- A power grid model based on [OpenStreetMap](https://zenodo.org/records/18619025) for voltage levels above 220kV (optional above 60kV).
+- The open power plant database
+  [powerplantmatching](https://github.com/PyPSA/powerplantmatching).
+- Electrical demand time series from the [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/).
+- Renewable time series based on ERA5 and SARAH-3, assembled using [atlite](https://github.com/PyPSA/atlite).
+- Geographical potentials for wind and solar generators based land eligibility analysis in [atlite](https://github.com/PyPSA/atlite).
+- Energy balances compiled from Eurostat and JRC-IDEES datasets.
 
-Bias correction is applied to reanalysis-based wind resources using
-observed wind generation data, allowing:
+The high-voltage grid and the power plant fleet are shown in this map of the unclustered model (as of 1 January 2026):
 
-- Correction of systematic reanalysis biases
-- Comparison between corrected and uncorrected wind inputs
-- Explicit separation of meteorological and system modelling uncertainty
-
-PyVWF is developed and maintained separately:
-https://github.com/ellyess/PyVWF
-
-## Intended use
-
-This repository is intended for:
-
-- Doctoral and academic research
-- Sensitivity analysis of wind resource assumptions
-- Methodological comparison of wind modelling approaches
-- Reproducible experiments for peer-reviewed publication
-
-It is **not** intended as:
-- A production-ready power system model
-- A replacement for upstream pypsa-eur
-- A general-purpose wind forecasting tool
-
-## Reproducibility and configuration
-
-All extensions introduced in this fork are:
-
-- Explicitly configurable
-- Disabled by default unless activated
-- Designed to be reproducible across systems
-
-Users are expected to document:
-- Spatial resolution choices
-- Wake correction configuration
-- Bias correction training periods
-- Data sources and versions
-
-## Code structure (high-level)
-
-The fork preserves the upstream directory structure, with additional modules
-and modifications primarily affecting:
-
-- Wind resource preparation
-- Capacity factor generation
-- Pre-processing of reanalysis data
-
-Detailed implementation notes are documented in code-level docstrings.
-
-## Citation and academic use
-
-If this repository is used in academic work, please cite:
-
-- The original **pypsa-eur** repository
-- Any relevant PyPSA publications
-- The PyVWF framework, if bias correction is enabled
-
-This repository is part of an ongoing PhD thesis and may evolve as the research
-progresses.
-
-## Acknowledgements
-
-This work builds directly on the pypsa-eur model developed by the
-PyPSA community.
-
-Upstream contributions and design decisions are gratefully acknowledged.
-
-## Disclaimer
-
-This repository represents **research code under active development**.
-Results obtained using this fork should be interpreted in the context of
-methodological exploration rather than operational modelling.
+![PyPSA-Eur Unclustered](doc/img/base.png)
 
 
+For computational reasons the model is usually clustered down
+to 50-250 nodes. The image below shows the electricity network and power plants clustered to NUTS2 regions:
+
+![network diagram](doc/img/elec.png)
+
+This diagram gives an overview of the sectors and the links between
+them within each model region:
+
+![sector diagram](doc/img/multisector_figure.png)
+
+
+
+# Warnings
+
+PyPSA-Eur is under active development and has several
+[limitations](https://pypsa-eur.readthedocs.io/en/latest/limitations.html) which
+you should understand before using the model. The github repository
+[issues](https://github.com/PyPSA/pypsa-eur/issues) collect known topics we are
+working on (please feel free to help or make suggestions). The
+[documentation](https://pypsa-eur.readthedocs.io/) remains somewhat patchy. You
+can find showcases of the model's capabilities in the Joule paper [The potential
+role of a hydrogen network in
+Europe](https://doi.org/10.1016/j.joule.2023.06.016), another [paper in Joule
+with a description of the industry
+sector](https://doi.org/10.1016/j.joule.2022.04.016), or in [a 2021 presentation
+at EMP-E](https://nworbmot.org/energy/brown-empe.pdf). We do not recommend to
+use the full resolution network model for simulations. At high granularity the
+assignment of loads and generators to the nearest network node may not be a
+correct assumption, depending on the topology of the underlying distribution
+grid, and local grid bottlenecks may cause unrealistic load-shedding or
+generator curtailment. We recommend to cluster the network to a couple of
+hundred nodes to remove these local inconsistencies. See the discussion in
+Section 3.4 "Model validation" of the paper.
+
+# Contributing and Support
+We strongly welcome anyone interested in contributing to this project. If you have any ideas, suggestions or encounter problems, feel invited to file issues or make pull requests on GitHub.
+-   To **discuss** with other PyPSA users, organise projects, share news, and get in touch with the community you can use the [Discord server](https://discord.gg/AnuJBk23FU).
+-   For **bugs and feature requests**, please use the [PyPSA-Eur Github Issues page](https://github.com/PyPSA/pypsa-eur/issues).
+
+# Licence
+
+The code in PyPSA-Eur is released as free software under the
+[MIT License](https://opensource.org/licenses/MIT), see [`doc/licenses.rst`](doc/licenses.rst).
+However, different licenses and terms of use may apply to the various
+input data, see [`doc/data_sources.rst`](doc/data_sources.rst).

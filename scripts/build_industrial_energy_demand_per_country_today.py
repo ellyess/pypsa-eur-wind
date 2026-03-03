@@ -1,20 +1,8 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: : 2020-2024 The PyPSA-Eur Authors
+# SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
 """
 Build industrial energy demand per country.
-
-Inputs
--------
-
-- ``data/jrc-idees-2021``
-- ``industrial_production_per_country.csv``
-
-Outputs
--------
-
-- ``resources/industrial_energy_demand_per_country_today.csv``
 
 Description
 -------
@@ -60,13 +48,18 @@ the output file contains the energy demand in TWh/a for the following carriers
 - waste
 """
 
+import logging
 import multiprocessing as mp
 from functools import partial
+from pathlib import Path
 
 import country_converter as coco
 import pandas as pd
-from _helpers import set_scenario_config
 from tqdm import tqdm
+
+from scripts._helpers import configure_logging, set_scenario_config
+
+logger = logging.getLogger(__name__)
 
 cc = coco.CountryConverter()
 
@@ -116,6 +109,21 @@ fuels = {
     "Electricity": "electricity",
 }
 
+fuels_eurostat = {
+    "TOTAL": "all",  # Total
+    "C0000X0350-0370": "solid",  # Solid fossil fuels
+    "P1000": "solid",  # Peat and peat products
+    "S2000": "solid",  # Oil shale and oil sands
+    "O4000XBIO": "liquid",  # Oil and petroleum products
+    "C0350-0370": "gas",  # Manufactured gases
+    "G3000": "gas",  # Natural gas
+    "N900H": "heat",  # Nuclear heat
+    "H8000": "heat",  # Heat
+    "RA000": "biomass",  # Renewables and biofuels
+    "W6100_6220": "waste",  # Non-renewable waste
+    "E7000": "electricity",  # Electricity
+}
+
 eu27 = cc.EU27as("ISO2").ISO2.tolist()
 
 jrc_names = {"GR": "EL", "GB": "UK"}
@@ -123,7 +131,13 @@ jrc_names = {"GR": "EL", "GB": "UK"}
 
 def industrial_energy_demand_per_country(country, year, jrc_dir, endogenous_ammonia):
     jrc_country = jrc_names.get(country, country)
-    fn = f"{jrc_dir}/{jrc_country}/JRC-IDEES-2021_EnergyBalance_{jrc_country}.xlsx"
+
+    root = Path(jrc_dir, jrc_country)
+    fn = next(
+        p
+        for y in ("2023", "2021")
+        if (p := root / f"JRC-IDEES-{y}_EnergyBalance_{jrc_country}.xlsx").exists()
+    )
 
     sheets = list(sector_sheets.values())
     df_dict = pd.read_excel(fn, sheet_name=sheets, index_col=0)
@@ -253,7 +267,8 @@ def add_coke_ovens(demand, fn, year, factor=0.75):
     consumption should be attributed to the iron and steel production.
     The default value of 75% is based on https://doi.org/10.1016/j.erss.2022.102565
 
-    Parameters:
+    Parameters
+    ----------
     demand (pd.DataFrame): A pandas DataFrame containing energy demand data
                            with a multi-level column index where one of the
                            levels corresponds to "Integrated steelworks".
@@ -263,14 +278,20 @@ def add_coke_ovens(demand, fn, year, factor=0.75):
     factor (float, optional): The proportion of coke ovens energy consumption to add to the
                               integrated steelworks demand. Defaults to 0.75.
 
-    Returns:
+    Returns
+    -------
     pd.DataFrame: The updated `demand` DataFrame with the coke ovens energy
     consumption added to the integrated steelworks energy demand.
     """
 
     df = pd.read_csv(fn, index_col=[0, 1]).xs(year, level=1)
-    df = df.rename(columns={"Total all products": "Total"})[fuels.keys()]
-    df = df.rename(columns=fuels).T.groupby(level=0).sum().T
+    df = (
+        df[fuels_eurostat.keys()]
+        .rename(columns=fuels_eurostat)
+        .T.groupby(level=0)
+        .sum()
+        .T
+    )
     df["other"] = df["all"] - df.loc[:, df.columns != "all"].sum(axis=1)
     df = df.T.reindex_like(demand.xs("Integrated steelworks", axis=1, level=1)).fillna(
         0
@@ -283,9 +304,10 @@ def add_coke_ovens(demand, fn, year, factor=0.75):
 
 if __name__ == "__main__":
     if "snakemake" not in globals():
-        from _helpers import mock_snakemake
+        from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake("build_industrial_energy_demand_per_country_today")
+    configure_logging(snakemake)
     set_scenario_config(snakemake)
 
     params = snakemake.params.industry
