@@ -14,6 +14,14 @@ import xarray as xr
 
 logger = logging.getLogger(__name__)
 
+# Keyword aliases for bias correction files.
+# Keys are lowercase canonical names; values are paths relative to the project root.
+BIAS_CORRECTION_FILES = {
+    "idw": "bias-extra/europe_corrections_idw_best.nc",
+    "kriging": "bias-extra/europe_corrections_kriging_best.nc",
+    "legacy": "bias-extra/atlite_bias.nc",
+}
+
 
 def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
     """
@@ -38,9 +46,11 @@ def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
         Height (m) to which the wind speeds are extrapolated to.
     bias_corr : bool or str or Path, optional
         If False (default), no bias correction is applied.
-        If True, bias correction is applied using 'bias-extra/atlite_bias.nc'.
-        If a string or Path, it is used as the path to the bias correction
-        dataset (must contain 'scalar' and 'offset' variables).
+        If True, uses legacy default 'bias-extra/atlite_bias.nc'.
+        If "idw", uses 'bias-extra/europe_corrections_idw_best.nc'.
+        If "kriging", uses 'bias-extra/europe_corrections_kriging_best.nc'.
+        If a string or Path not matching a keyword, used as a custom file path
+        (must contain 'scalar' and 'offset' variables).
 
     Returns
     -------
@@ -82,18 +92,24 @@ def extrapolate_wind_speed(ds, to_height, from_height=None, bias_corr=False):
     if bias_corr:
         from pathlib import Path
 
-        if isinstance(bias_corr, (str, Path)) and str(bias_corr) not in ("True", "true"):
+        bc_str = str(bias_corr).strip().lower()
+
+        if bc_str in ("true", "1"):
+            bias_path = BIAS_CORRECTION_FILES["legacy"]
+        elif bc_str in BIAS_CORRECTION_FILES:
+            bias_path = BIAS_CORRECTION_FILES[bc_str]
+        elif isinstance(bias_corr, (str, Path)):
             bias_path = str(bias_corr)
         else:
-            bias_path = "bias-extra/atlite_bias.nc"
+            bias_path = BIAS_CORRECTION_FILES["legacy"]
 
         logger.info("Applying wind speed bias correction from %s", bias_path)
         bias_fac = xr.open_dataset(bias_path)
-        # # Handle both x/y and lon/lat coordinate conventions
-        # if "lon" in bias_fac.dims and "lat" in bias_fac.dims:
-        #     interp_kw = dict(lon=wnd_spd.x.values, lat=wnd_spd.y.values)
-        # else:
-        interp_kw = dict(x=wnd_spd.x.values, y=wnd_spd.y.values)
+        # Handle both x/y and lon/lat coordinate conventions
+        if "lon" in bias_fac.dims and "lat" in bias_fac.dims:
+            interp_kw = dict(lon=wnd_spd.x.values, lat=wnd_spd.y.values)
+        else:
+            interp_kw = dict(x=wnd_spd.x.values, y=wnd_spd.y.values)
         scalar = bias_fac.scalar.interp(
             method="nearest", **interp_kw,
             kwargs={"fill_value": 1.0},

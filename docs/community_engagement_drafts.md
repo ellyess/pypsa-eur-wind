@@ -56,7 +56,7 @@ data. Impact: +8.2% system cost.
 
 1. **Config structure**: Should wake model configuration go under
    `electricity.wake_model`, or do you prefer a different location? Currently in my
-   fork it lives under `offshore_mods`.
+   fork it lives under `spatial_mods`.
 2. **Region splitting**: Should this integrate into `cluster_network.py` or be a
    separate Snakemake rule?
 3. **Naming**: What naming conventions would you prefer for the wake models? I've been
@@ -99,3 +99,36 @@ I'd like to contribute this, either:
 - As a separate follow-up PR building on whatever interface PR #405 establishes
 
 I'm happy to adapt to whatever architecture you converge on. What would be most helpful?
+
+---
+
+## 3. Note: Relationship Between Split Regions and Upstream Resource Classes (Bins)
+
+Since PyPSA-Eur now supports multiple capacity factor bins per bus (the `resource_classes`
+parameter), it's worth clarifying that **split regions and resource classes are orthogonal
+and complementary**, not redundant:
+
+- **Resource classes (bins)** partition grid cells within a fixed geographic region by
+  **capacity factor quality** — the optimizer can prefer building on windier sites within
+  a region. The region boundaries do not change, and bins have no concept of area.
+
+- **Split regions** partition large geographic regions into **smaller spatial areas** via
+  Voronoi cells. Each sub-region gets its own temporal wind profile (capturing spatial
+  decorrelation) and its own **area in km²**.
+
+The critical distinction for the tiered-density wake model: it needs region area to compute
+capacity density (MW/km²). Without split regions, a 100,000 km² North Sea cluster would
+allow ~83 GW per density tier, making the wake penalty physically meaningless. With split
+regions at a 10,000 km² threshold, tiers are capped at a realistic ~8 GW.
+
+| Aspect                        | Resource Classes (Bins)       | Split Regions                      |
+|-------------------------------|-------------------------------|------------------------------------|
+| Differentiates by             | CF quality (wind speed)       | Geographic location                |
+| Changes region geometry       | No                            | Yes                                |
+| Provides area for wake model  | No                            | Yes                                |
+| Captures spatial decorrelation| No                            | Yes                                |
+| Prevents CF averaging         | Partially (by quality)        | Yes (by geography)                 |
+
+Ideally both would be used together: split regions first to create physically meaningful
+sub-regions for wake modeling and temporal decorrelation, then bins within each sub-region
+for CF quality differentiation.

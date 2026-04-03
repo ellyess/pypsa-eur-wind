@@ -1,0 +1,6 @@
+chapter,chapter_name,script,region,network_type,scenarios,resolutions,wake_models,bias_correction,offshore_strategy,purpose
+5,Spatial Resolution,compare_spatial_runs.py,North Sea,Electric-only,Baseline,"1k,5k,10k,50k,100k,1M",standard,False,standard,Resolution sensitivity analysis
+6,Wake Models,compare_wake_runs.py,North Sea,Electric-only,"Base,Uniform,Tiered-capacity,Tiered-density","1k,5k,10k,50k,100k","base,standard,glaum,new_more",False,dominant,Wake model comparison
+7,Bias Correction,compare_bias_runs.py,North Sea,Electric-only,"Baseline,Uniform,PyVWF",100k,standard,"False,Uniform,True",standard,Bias correction methods comparison
+8a,Sensitivity Tier 1,compare_sensitivity_runs_tier1.py,"North Sea (s_10)",Sector-coupled,"Base,Bias,Wake,Bias+Wake","1k,5k,10k,50k,100k","base,new_more","False,True",dominant,Exhaustive factorial sensitivity
+8b,Sensitivity Tier 2,compare_sensitivity_runs_tier2.py,"Europe-wide (s_30)",Sector-coupled,"Base,Bias+Wake","10k,100k","base,new_more","False,True",dominant,Confirmatory geographic scalability

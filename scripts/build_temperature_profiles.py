@@ -28,7 +28,7 @@ from scripts._helpers import (
 )
 
 # Variable spatial resolution: caching
-from wake_helpers import get_offshore_mods, get_wake_dir, temperature_cache_paths
+from wake_helpers import get_spatial_mods, get_wake_dir, temperature_cache_paths
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     set_scenario_config(snakemake)
 
     # Cache lookup
-    mods = get_offshore_mods(snakemake.config)
+    mods = get_spatial_mods(snakemake.config)
     wake_dir = get_wake_dir(mods)
     clusters = snakemake.wildcards.clusters
     cache_air, cache_soil = temperature_cache_paths(wake_dir=wake_dir, clusters=clusters)

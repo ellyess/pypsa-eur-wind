@@ -71,7 +71,7 @@ from scripts._helpers import configure_logging, load_cutout, set_scenario_config
 
 # Variable spatial resolution: cache and region loading
 from wake_helpers import (
-    get_offshore_mods,
+    get_spatial_mods,
     get_threshold,
     get_wake_dir,
     load_regions,
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     params = snakemake.params.renewable[technology]
 
     # Variable spatial resolution: cache lookup
-    mods = get_offshore_mods(snakemake.config)
+    mods = get_spatial_mods(snakemake.config)
     clusters = snakemake.wildcards.clusters
     threshold = (
         get_threshold(mods, technology)

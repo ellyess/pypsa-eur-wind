@@ -69,6 +69,7 @@ _DEFAULTS = {
     "capacity_tiered": DEFAULT_CAPACITY_TIERED_COEFFICIENTS,
     "tiered_density": DEFAULT_TIERED_DENSITY_COEFFICIENTS,
     # Legacy aliases
+    "base": DEFAULT_FLAT_COEFFICIENTS,
     "standard": DEFAULT_FLAT_COEFFICIENTS,
     "glaum": DEFAULT_CAPACITY_TIERED_COEFFICIENTS,
     "new_more": DEFAULT_TIERED_DENSITY_COEFFICIENTS,
@@ -109,6 +110,8 @@ def get_wake_coefficients(config: dict, method: str) -> dict:
         Full snakemake config dictionary.
     method : str
         Wake model name: "flat", "capacity_tiered", or "tiered_density".
+        Legacy aliases ("base", "standard", "glaum", "new_more") are also
+        accepted.
 
     Returns
     -------

@@ -36,12 +36,15 @@ from typing import Iterable, Dict, List, Tuple, Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard, savefig_thesis
 from thesis_colors import SCENARIO_COLORS, get_color_cycle
 
 # Apply thesis-wide plotting style
 _style = thesis_plot_style()
 cm, lw, ms, dpi = _style['cm'], _style['lw'], _style['ms'], _style['dpi']
+FULL_WIDTH = _style['FULL_WIDTH']
+HALF_WIDTH = _style['HALF_WIDTH']
+MAP_WIDTH = _style['MAP_WIDTH']
 import seaborn as sns
 
 import geopandas as gpd
@@ -76,22 +79,8 @@ custom_params = {
 }
 sns.set_theme(style="ticks", rc=custom_params)
 
-plt.rcParams.update(
-    {
-        "font.family": "serif",
-        "mathtext.fontset": "dejavuserif",
-        "mathtext.default": "it",
-        "font.size": 7,
-        "axes.titlesize": 7,
-        "axes.labelsize": 7,
-        "xtick.labelsize": 6,
-        "ytick.labelsize": 6,
-        "legend.fontsize": 6,
-        "legend.title_fontsize": 6,
-        "axes.spines.right": False,
-        "axes.spines.top": False,
-    }
-)
+# Re-apply thesis style after seaborn's set_theme to ensure canonical sizes
+thesis_plot_style()
 
 # Muted, print-safe palette consistent with the wake/bias chapter figures
 WAKE_COLORS = {
@@ -415,9 +404,17 @@ def plot_region_splits(
 ):
     regions_dir = Path(regions_dir)
 
+    # Derive onshore template from offshore template
+    onshore_template = filename_template.replace("offshore", "onshore")
+
+    FACE_ONSHORE = "#e8e8e8"
+    FACE_OFFSHORE = "#cce0f5"
+    EDGE_ONSHORE = "#666666"
+    EDGE_OFFSHORE = "#235ebc"
+
     fig, ax = plt.subplots(
         1, len(splits),
-        figsize=(17.8 * cm, 4.8 * cm),  # two-column friendly
+        figsize=(min(17.8, 4.5 * len(splits)) * cm, 4.8 * cm),
         dpi=600,
         sharex=True,
         sharey=True,
@@ -428,33 +425,48 @@ def plot_region_splits(
         ax = [ax]
 
     for i, split in enumerate(splits):
-        fp = regions_dir / prefix / filename_template.format(split=split)
+        fp_off = regions_dir / prefix / filename_template.format(split=split)
+        fp_on = regions_dir / prefix / onshore_template.format(split=split)
 
-        if not fp.exists():
-            # Don’t crash the whole run: show a warning panel
+        has_data = False
+
+        # Plot onshore first (background layer)
+        if fp_on.exists():
+            gpd.read_file(fp_on).plot(
+                ax=ax[i],
+                linewidth=LW,
+                color=FACE_ONSHORE,
+                edgecolor=EDGE_ONSHORE,
+            )
+            has_data = True
+
+        # Plot offshore on top
+        if fp_off.exists():
+            gpd.read_file(fp_off).plot(
+                ax=ax[i],
+                linewidth=LW,
+                color=FACE_OFFSHORE,
+                edgecolor=EDGE_OFFSHORE,
+            )
+            has_data = True
+
+        if has_data:
+            ax[i].set_title(
+                rf"$A_{{region}}^{{max}}$: {split:,} km$^2$",
+                fontsize=7,
+            )
+            ax[i].set_axis_off()
+        else:
             ax[i].set_axis_off()
             ax[i].text(
                 0.5,
                 0.5,
-                f"Missing:\n{fp}",
+                f"Missing:\n{fp_off}\n{fp_on}",
                 transform=ax[i].transAxes,
                 ha="center",
                 va="center",
                 fontsize=7,
             )
-        else:
-            gpd.read_file(fp).plot(
-                ax=ax[i],
-                linewidth=LW,
-                color=FACE,
-                edgecolor=EDGE,
-            )
-
-            ax[i].set_title(
-                rf"Spatial Resolution ($A_{{region}}^{{max}}$):" + "\n" + f"{split:,} km$^2$",
-                fontsize=7,
-            )
-            ax[i].set_axis_off()
 
         # panel label
         ax[i].text(
@@ -463,6 +475,21 @@ def plot_region_splits(
             va="top", ha="left",
             fontsize=7,
         )
+
+    # Add legend using proxy patches
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor=FACE_ONSHORE, edgecolor=EDGE_ONSHORE, linewidth=LW, label="Onshore"),
+        Patch(facecolor=FACE_OFFSHORE, edgecolor=EDGE_OFFSHORE, linewidth=LW, label="Offshore"),
+    ]
+    ax[-1].legend(
+        handles=legend_elements,
+        loc="lower right",
+        fontsize=6,
+        frameon=True,
+        framealpha=0.9,
+        edgecolor="none",
+    )
 
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -480,10 +507,265 @@ def plot_iqr_band(ax, x, median, q25, q75, ylabel, title=None):
     ax.grid(True, which="both", axis="both", alpha=0.3)
     sns.despine(ax=ax)
 
+def _run_spatial_diagnostics(
+    results_dir: Path,
+    out_dir: Path,
+    label: str,
+    args,
+):
+    """
+    Run the full spatial diagnostics pipeline for a single carrier configuration.
+
+    Parameters
+    ----------
+    results_dir : Path
+        Directory containing the network results for this configuration.
+    out_dir : Path
+        Output directory for plots and CSV for this configuration.
+    label : str
+        Human-readable label (e.g. "standard", "dominant").
+    args : argparse.Namespace
+        Parsed CLI arguments (shared settings like glob, carriers, etc.).
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n{'='*60}")
+    print(f"  Processing: {label}")
+    print(f"  Results dir: {results_dir}")
+    print(f"  Output dir:  {out_dir}")
+    print(f"{'='*60}\n")
+
+    paths = discover_networks(results_dir, args.glob)
+    if args.planning_horizon:
+        paths = [p for p in paths if args.planning_horizon in p.name]
+
+    run_re = re.compile(args.run_include) if args.run_include else None
+    if run_re:
+        paths = [p for p in paths if run_re.search(parse_run_name_from_path(p))]
+
+    if not paths:
+        print(f"[WARN] No networks found for '{label}' in {results_dir}. Skipping.")
+        return
+
+    stats: List[WindStats] = []
+    for p in paths:
+        try:
+            s = compute_stats_for_network(p, args.carrier_onwind, args.carrier_offwind)
+            if s is not None:
+                stats.append(s)
+        except Exception as e:
+            print(f"[WARN] Failed on {p}: {e}")
+
+    if not stats:
+        print(f"[WARN] No usable networks for '{label}' after parsing Amax. Skipping.")
+        return
+
+    df = pd.DataFrame([s.__dict__ for s in stats])
+    df = df.sort_values("amax")
+    df.to_csv(out_dir / "spatial_resolution_metrics.csv", index=False)
+
+    # --- Plot 1: total wind built
+
+    fig, ax = new_fig_ax(MAP_WIDTH / cm, args.fig_h_cm)
+    ax.plot(df["amax"], df["total_wind_gw"], marker="o", label="Total wind")
+    ax.plot(df["amax"], df["onwind_gw"], marker="o", label="Onshore wind")
+    ax.plot(df["amax"], df["offwind_gw"], marker="o", label="Offshore wind")
+    apply_spatial_resolution_axis(ax, annotate=False)
+    ax.set_ylabel("Built wind capacity [GW]")
+    ax.grid(True, which="both", alpha=0.3)
+    add_resolution_markers(ax, df['amax'].values)
+    sns.despine(ax=ax)
+    ax.legend(loc='best', frameon=False)
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(out_dir / "wind_capacity_vs_amax.pdf", dpi=600, bbox_inches="tight")
+    plt.close(fig)
+
+    # --- Plot 2: CF median + IQR
+    fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+    plot_iqr_band(
+        ax,
+        df["amax"].values,
+        df["cf_median"].values,
+        df["cf_q25"].values,
+        df["cf_q75"].values,
+        ylabel="Built-capacity-weighted CF [-]",
+    )
+    apply_spatial_resolution_axis(ax, annotate=False)
+    add_resolution_markers(ax, df['amax'].values)
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(out_dir / "wind_cf_iqr_vs_amax.pdf", dpi=600, bbox_inches="tight")
+    plt.close(fig)
+
+    # --- Plot 3: Curtailment median + IQR
+    fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+    plot_iqr_band(
+        ax,
+        df["amax"].values,
+        df["curtail_median"].values,
+        df["curtail_q25"].values,
+        df["curtail_q75"].values,
+        ylabel="Built-capacity-weighted curtailment [-]",
+    )
+    apply_spatial_resolution_axis(ax, annotate=False)
+    add_resolution_markers(ax, df['amax'].values)
+    fig.tight_layout()
+    format_axes_standard(fig)
+    fig.savefig(out_dir / "wind_curtailment_iqr_vs_amax.pdf", dpi=600, bbox_inches="tight")
+    plt.close(fig)
+
+    # --- Optional: market value / line volume / price dispersion
+    if df["wind_market_value"].notna().any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        ax.plot(df["amax"], df["wind_market_value"], marker="o")
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel("Wind market value [EUR/MWh]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "wind_market_value_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    if df["line_volume"].notna().any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        ax.plot(df["amax"], df["line_volume"], marker="o")
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel("Line volume proxy [MW-km]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "line_volume_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    if df["price_dispersion"].notna().any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        ax.plot(df["amax"], df["price_dispersion"], marker="o")
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel("Price dispersion (std of mean nodal prices) [EUR/MWh]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "price_dispersion_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: System cost vs Amax ---
+    if df["objective"].notna().any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        obj_bn = df["objective"] / 1e9  # Convert EUR to billion EUR
+        ax.plot(df["amax"], obj_bn, marker="o", color=WAKE_COLORS["total"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel(r"System cost [B€]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "system_cost_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: Transmission expansion vs Amax ---
+    if df["trans_expansion"].notna().any() and (df["trans_expansion"] > 0).any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        trans_twkm = df["trans_expansion"] / 1e6  # MW-km to TW-km
+        ax.plot(df["amax"], trans_twkm, marker="o", color=WAKE_COLORS["network"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel(r"Transmission expansion [TW$\cdot$km]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "transmission_expansion_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    # --- Plot: CF IQR width (dispersion metric) vs Amax ---
+    if df["cf_q75"].notna().any() and df["cf_q25"].notna().any():
+        fig, ax = new_fig_ax(HALF_WIDTH / cm, args.fig_h_cm)
+        iqr_width = df["cf_q75"] - df["cf_q25"]
+        ax.plot(df["amax"], iqr_width, marker="o", color=WAKE_COLORS["cf"])
+        apply_spatial_resolution_axis(ax, annotate=False)
+        ax.set_ylabel("CF IQR width (Q75 - Q25) [-]")
+        ax.grid(True, which="both", alpha=0.3)
+        add_resolution_markers(ax, df['amax'].values)
+        sns.despine(ax=ax)
+        fig.tight_layout()
+        format_axes_standard(fig)
+        fig.savefig(out_dir / "cf_iqr_width_vs_amax.pdf", dpi=600, bbox_inches="tight")
+        plt.close(fig)
+
+    if args.plot_region_splits:
+        plot_region_splits(
+            args.regions_prefix,
+            args.splits,
+            regions_dir=args.regions_dir,
+            filename_template=args.regions_template,
+            out=str(out_dir / "region_splits.png"),
+        )
+
+    # --- Optional: per-run histograms
+    if args.make_per_run_hists:
+        for _, row in df.iterrows():
+            try:
+                n = pypsa.Network(row["network_path"])
+                wind_gens = select_generators_by_carrier(n, args.carrier_onwind).union(
+                    select_generators_by_carrier(n, args.carrier_offwind)
+                )
+                cf = generator_cf(n, wind_gens)
+                curtail = generator_curtailment(n, wind_gens)
+                w = n.generators.loc[wind_gens, "p_nom_opt"] if "p_nom_opt" in n.generators.columns else n.generators.loc[wind_gens, "p_nom"]
+                w = pd.to_numeric(w, errors="coerce").fillna(0.0)
+
+                # CF histogram (weighted)
+                fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
+                ax.hist(cf.dropna().values, bins=30, weights=w.loc[cf.dropna().index].values, density=True)
+                ax.set_xlabel("CF [-]")
+                ax.set_ylabel("Density (capacity-weighted)")
+                ax.set_title(f"CF distribution (built-weighted) — {row['run']}")
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                format_axes_standard(fig)
+                fig.savefig(out_dir / f"hist_cf_{row['run']}.png", dpi=600)
+                plt.close(fig)
+
+                # Curtailment histogram (weighted)
+                fig, ax = plt.subplots(figsize=(7, 4))
+                ax.hist(curtail.dropna().values, bins=30, weights=w.loc[curtail.dropna().index].values, density=True)
+                ax.set_xlabel("Curtailment [-]")
+                ax.set_ylabel("Density (capacity-weighted)")
+                ax.set_title(f"Curtailment distribution (built-weighted) — {row['run']}")
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                format_axes_standard(fig)
+                fig.savefig(out_dir / f"hist_curtail_{row['run']}.png", dpi=600)
+                plt.close(fig)
+
+            except Exception as e:
+                print(f"[WARN] Histogram failed for {row['run']}: {e}")
+
+    print(f"Done [{label}]. Wrote plots + CSV to {out_dir}")
+
+
+# ---- Carrier configuration registry ----
+# Each entry maps a short label to the results directory name.
+# The output will go to <out_dir>/<label>/.
+SPATIAL_CONFIGS = {
+    "standard": "results/thesis-spatial-2030-10-northsea-standard-6h",
+    "dominant": "results/thesis-spatial-2030-10-northsea-dominant-6h",
+}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--results-dir", type=Path, default=Path("results"))
-    ap.add_argument("--glob", type=str, default="*/postnetworks/*.nc",
+    ap.add_argument("--results-dir", type=Path, default=None,
+                    help="Single results directory (overrides built-in configs). "
+                         "Use this for a one-off run instead of the default standard/dominant pair.")
+    ap.add_argument("--glob", type=str, default="*/networks/*.nc",
                     help="Glob pattern relative to results-dir, used with rglob.")
     ap.add_argument("--out-dir", type=Path, default=Path("plots/spatial_diagnostics"))
     ap.add_argument("--carrier-onwind", nargs="+", default=["onwind"])
@@ -532,7 +814,7 @@ def main():
         "--splits",
         type=int,
         nargs="+",
-        default=[100000, 50000, 10000, 5000, 1000],
+        default=[100000, 10000, 1000],
         help="List of Amax (km^2) splits to plot in the region map figure.",
     )
     ap.add_argument(
@@ -540,243 +822,56 @@ def main():
         default="regions_offshore_s{split}.geojson",
         help="Filename template inside <regions-dir>/<prefix>/, with {split} placeholder.",
     )
+    ap.add_argument(
+        "--configs",
+        nargs="+",
+        default=None,
+        help="Which configs to run (keys from SPATIAL_CONFIGS). "
+             "Default: run all. E.g. --configs standard dominant",
+    )
     args = ap.parse_args()
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-
-    paths = discover_networks(args.results_dir, args.glob)
-    if args.planning_horizon:
-        paths = [p for p in paths if args.planning_horizon in p.name]
-
-    run_re = re.compile(args.run_include) if args.run_include else None
-    if run_re:
-        paths = [p for p in paths if run_re.search(parse_run_name_from_path(p))]
-
-    if not paths:
-        raise SystemExit("No networks found. Adjust --results-dir / --glob / filters.")
-
-    stats: List[WindStats] = []
-    for p in paths:
-        try:
-            s = compute_stats_for_network(p, args.carrier_onwind, args.carrier_offwind)
-            if s is not None:
-                stats.append(s)
-        except Exception as e:
-            print(f"[WARN] Failed on {p}: {e}")
-
-    if not stats:
-        raise SystemExit("No usable networks after parsing Amax from run names.")
-
-    df = pd.DataFrame([s.__dict__ for s in stats])
-
-    # If multiple networks per Amax (e.g. different wake models), keep all, but
-    # default to aggregating by Amax via mean (you can change this easily).
-    df = df.sort_values("amax")
-
-    df.to_csv(args.out_dir / "spatial_resolution_metrics.csv", index=False)
-
-    # --- Plot 1: total wind built
-
-    fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-    ax.plot(df["amax"], df["total_wind_gw"], marker="o", label="Total wind")
-    ax.plot(df["amax"], df["onwind_gw"], marker="o", label="Onshore wind")
-    ax.plot(df["amax"], df["offwind_gw"], marker="o", label="Offshore wind")
-    apply_spatial_resolution_axis(ax, annotate=False)
-    ax.set_ylabel("Built wind capacity [GW]")
-    ax.grid(True, which="both", alpha=0.3)
-    add_resolution_markers(ax, df['amax'].values)
-    sns.despine(ax=ax)
-    ax.legend(loc='best', frameon=False)
-    fig.tight_layout()
-    format_axes_standard(fig)
-    fig.savefig(args.out_dir / "wind_capacity_vs_amax.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- Plot 2: CF median + IQR
-    fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-    plot_iqr_band(
-        ax,
-        df["amax"].values,
-        df["cf_median"].values,
-        df["cf_q25"].values,
-        df["cf_q75"].values,
-        ylabel="Built-capacity-weighted CF [-]",
-        title="Wind CF distribution (weighted by built capacity)",
-    )
-    apply_spatial_resolution_axis(ax, annotate=False)
-    add_resolution_markers(ax, df['amax'].values)
-    fig.tight_layout()
-    format_axes_standard(fig)
-    fig.savefig(args.out_dir / "wind_cf_iqr_vs_amax.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- Plot 3: Curtailment median + IQR
-    fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-    plot_iqr_band(
-        ax,
-        df["amax"].values,
-        df["curtail_median"].values,
-        df["curtail_q25"].values,
-        df["curtail_q75"].values,
-        ylabel="Built-capacity-weighted curtailment [-]",
-        title="Wind curtailment distribution (weighted by built capacity)",
-    )
-    apply_spatial_resolution_axis(ax, annotate=False)
-    add_resolution_markers(ax, df['amax'].values)
-    fig.tight_layout()
-    format_axes_standard(fig)
-    fig.savefig(args.out_dir / "wind_curtailment_iqr_vs_amax.png", dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    # --- Optional: market value / line volume / price dispersion
-    if df["wind_market_value"].notna().any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        ax.plot(df["amax"], df["wind_market_value"], marker="o")
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel("Wind market value [EUR/MWh]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "wind_market_value_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    if df["line_volume"].notna().any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        ax.plot(df["amax"], df["line_volume"], marker="o")
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel("Line volume proxy [MW-km]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "line_volume_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    if df["price_dispersion"].notna().any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        ax.plot(df["amax"], df["price_dispersion"], marker="o")
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel("Price dispersion (std of mean nodal prices) [EUR/MWh]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "price_dispersion_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    # --- Plot: System cost vs Amax ---
-    if df["objective"].notna().any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        obj_bn = df["objective"] / 1e9  # Convert EUR to billion EUR
-        ax.plot(df["amax"], obj_bn, marker="o", color=WAKE_COLORS["total"])
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel(r"System cost [B€]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "system_cost_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    # --- Plot: Transmission expansion vs Amax ---
-    if df["trans_expansion"].notna().any() and (df["trans_expansion"] > 0).any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        trans_twkm = df["trans_expansion"] / 1e6  # MW-km to TW-km
-        ax.plot(df["amax"], trans_twkm, marker="o", color=WAKE_COLORS["network"])
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel(r"Transmission expansion [TW$\cdot$km]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "transmission_expansion_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    # --- Plot: CF IQR width (dispersion metric) vs Amax ---
-    if df["cf_q75"].notna().any() and df["cf_q25"].notna().any():
-        fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-        iqr_width = df["cf_q75"] - df["cf_q25"]
-        ax.plot(df["amax"], iqr_width, marker="o", color=WAKE_COLORS["cf"])
-        apply_spatial_resolution_axis(ax, annotate=False)
-        ax.set_ylabel("CF IQR width (Q75 - Q25) [-]")
-        ax.grid(True, which="both", alpha=0.3)
-        add_resolution_markers(ax, df['amax'].values)
-        sns.despine(ax=ax)
-        fig.tight_layout()
-        format_axes_standard(fig)
-        fig.savefig(args.out_dir / "cf_iqr_width_vs_amax.png", dpi=300, bbox_inches="tight")
-        plt.close(fig)
-    
-    if args.plot_region_splits:
-        plot_region_splits(
-            args.regions_prefix,
-            args.splits,
-            regions_dir=args.regions_dir,
-            filename_template=args.regions_template,
-            out=str(Path(args.out_dir) / "region_splits.png"),
+    if args.results_dir is not None:
+        # Single-directory mode (backwards-compatible): run once, output directly to out_dir
+        _run_spatial_diagnostics(
+            results_dir=args.results_dir,
+            out_dir=args.out_dir,
+            label=args.results_dir.name,
+            args=args,
         )
-        
-    # --- Optional: per-run histograms
-    if args.make_per_run_hists:
-        for _, row in df.iterrows():
-            try:
-                n = pypsa.Network(row["network_path"])
-                wind_gens = select_generators_by_carrier(n, args.carrier_onwind).union(
-                    select_generators_by_carrier(n, args.carrier_offwind)
-                )
-                cf = generator_cf(n, wind_gens)
-                curtail = generator_curtailment(n, wind_gens)
-                w = n.generators.loc[wind_gens, "p_nom_opt"] if "p_nom_opt" in n.generators.columns else n.generators.loc[wind_gens, "p_nom"]
-                w = pd.to_numeric(w, errors="coerce").fillna(0.0)
+    else:
+        # Multi-config mode: loop over SPATIAL_CONFIGS, output to out_dir/<label>/
+        configs_to_run = args.configs if args.configs else list(SPATIAL_CONFIGS.keys())
+        for label in configs_to_run:
+            if label not in SPATIAL_CONFIGS:
+                print(f"[ERROR] Unknown config '{label}'. Available: {list(SPATIAL_CONFIGS.keys())}")
+                continue
+            results_dir = Path(SPATIAL_CONFIGS[label])
+            config_out_dir = args.out_dir / label
+            _run_spatial_diagnostics(
+                results_dir=results_dir,
+                out_dir=config_out_dir,
+                label=label,
+                args=args,
+            )
 
-                # CF histogram (weighted)
-                fig, ax = new_fig_ax(args.fig_w_cm, args.fig_h_cm)
-                ax.hist(cf.dropna().values, bins=30, weights=w.loc[cf.dropna().index].values, density=True)
-                ax.set_xlabel("CF [-]")
-                ax.set_ylabel("Density (capacity-weighted)")
-                ax.set_title(f"CF distribution (built-weighted) — {row['run']}")
-                ax.grid(True, alpha=0.3)
-                fig.tight_layout()
-                format_axes_standard(fig)
-                fig.savefig(args.out_dir / f"hist_cf_{row['run']}.png", dpi=200)
-                plt.close(fig)
-
-                # Curtailment histogram (weighted)
-                fig, ax = plt.subplots(figsize=(7, 4))
-                ax.hist(curtail.dropna().values, bins=30, weights=w.loc[curtail.dropna().index].values, density=True)
-                ax.set_xlabel("Curtailment [-]")
-                ax.set_ylabel("Density (capacity-weighted)")
-                ax.set_title(f"Curtailment distribution (built-weighted) — {row['run']}")
-                ax.grid(True, alpha=0.3)
-                fig.tight_layout()
-                format_axes_standard(fig)
-                fig.savefig(args.out_dir / f"hist_curtail_{row['run']}.png", dpi=200)
-                plt.close(fig)
-
-            except Exception as e:
-                print(f"[WARN] Histogram failed for {row['run']}: {e}")
-
-    print(f"Done. Wrote:\n  {args.out_dir}\n  spatial_resolution_metrics.csv + plots")
+    print("\nAll done.")
 
 
 if __name__ == "__main__":
     main()
-    
-    
+
+
 # Example usage:
-# python compare_spatial_runs.py \
-#   --results-dir results \
-#   --glob "thesis-spatial-2030-*/**/networks/*.nc" \
-#   --out-dir plots/spatial \
-#   --plot-region-splits \
-#   --make-per-run-hists \
-#   --fig-w-cm 14 --fig-h-cm 8 \
-#   --regions-dir wake_extra \
-#   --regions-prefix northsea \
-#   --splits 100000 50000 10000 5000 1000
+#
+# 1) Default: run both standard + dominant configs, output to plots/spatial_diagnostics/{standard,dominant}/
+#    python compare_spatial_runs.py --out-dir plots/spatial_diagnostics
+#
+# 2) Run only one config:
+#    python compare_spatial_runs.py --configs standard
+#
+# 3) Single-directory mode (backwards-compatible):
+#    python compare_spatial_runs.py \
+#      --results-dir results/thesis-spatial-2030-10-northsea-standard-6h \
+#      --out-dir plots/spatial_diagnostics/standard \
+#      --glob "*/networks/*.nc"

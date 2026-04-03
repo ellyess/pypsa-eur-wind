@@ -87,7 +87,7 @@ from thesis_colors import (
     WAKE_ORDER,
     WAKE_MODEL_COLORS,
 )
-from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard, savefig_thesis
 
 # Try importing wake_helpers for wake model plotting
 WAKE_HELPERS_AVAILABLE = False
@@ -141,12 +141,13 @@ def _get_split_style(split: int) -> dict:
 
 def _format_split_label(split: int) -> str:
     """Format split size for legend."""
-    if split >= 100000:
-        return f"{split//1000}k"
-    elif split >= 1000:
-        return f"{split//1000}k"
-    else:
-        return f"{split}"
+    return f"{int(split):,}"
+
+_module_style = thesis_plot_style()
+_cm = _module_style['cm']
+FULL_WIDTH = _module_style['FULL_WIDTH']
+HALF_WIDTH = _module_style['HALF_WIDTH']
+
 
 def _savefig(fig: plt.Figure, out: Path) -> None:
     _ensure_outdir(out)
@@ -201,8 +202,12 @@ def plot_wake_loss_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
+
+    # Shared bin edges across all series
+    all_vals = df["wake_loss"].dropna().to_numpy()
+    bin_edges = np.linspace(all_vals.min(), all_vals.max(), bins + 1) if len(all_vals) > 0 else bins
 
     for s in scenarios:
         for split in splits:
@@ -215,13 +220,13 @@ def plot_wake_loss_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
                 x = df.loc[df["scenario"] == s, "wake_loss"].dropna().to_numpy()
                 split_style = {'linestyle': '-', 'alpha': 1.0}
                 lbl = label(s)
-            
+
             if len(x) == 0:
                 continue
-            
+
             ax.hist(
                 x,
-                bins=bins,
+                bins=bin_edges,
                 density=True,
                 histtype="step",
                 label=lbl,
@@ -233,10 +238,7 @@ def plot_wake_loss_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
     ax.set_xlabel("Wake loss multiplier [-]")
     ax.set_ylabel("Density [-]")
     ax.set_xlim(left=0)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 def plot_wake_loss_cdf(df: pd.DataFrame, *, out: Path) -> None:
@@ -255,7 +257,7 @@ def plot_wake_loss_cdf(df: pd.DataFrame, *, out: Path) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
 
     for s in scenarios:
@@ -284,10 +286,7 @@ def plot_wake_loss_cdf(df: pd.DataFrame, *, out: Path) -> None:
     ax.set_ylabel("CDF [-]")
     ax.set_xlim(left=0)
     ax.set_ylim(0, 1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 def plot_wake_loss_box(df: pd.DataFrame, *, out: Path) -> None:
@@ -311,13 +310,13 @@ def plot_wake_loss_box(df: pd.DataFrame, *, out: Path) -> None:
         n_splits = len(splits)
         
         # Create grouped box plot with splits on x-axis
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
         
         positions = []
         data_all = []
         colors = []
         
-        group_width = n_scenarios + 0.5
+        group_width = n_scenarios + 2
         for i, split in enumerate(splits):
             for j, scenario in enumerate(scenarios):
                 mask = (df['scenario'] == scenario) & (df['split'] == split)
@@ -348,14 +347,14 @@ def plot_wake_loss_box(df: pd.DataFrame, *, out: Path) -> None:
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=_color_for(s), alpha=0.7, label=label(s)) 
                           for s in scenarios]
-        ax.legend(handles=legend_elements, title="Wake model", frameon=False,
-                 loc='best', fontsize=7)
+        ax.legend(handles=legend_elements, frameon=False,
+                 loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=len(scenarios))
         
     else:
         # Single split or no split column
         data = [df.loc[df["scenario"] == s, "wake_loss"].dropna().to_numpy() for s in scenarios]
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         bp = ax.boxplot(
             data,
             tick_labels=[label(s) for s in scenarios],
@@ -391,8 +390,12 @@ def plot_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
+
+    # Shared bin edges across all series
+    all_vals = df["available_cf"].dropna().to_numpy()
+    bin_edges = np.linspace(all_vals.min(), all_vals.max(), bins + 1) if len(all_vals) > 0 else bins
 
     for s in scenarios:
         for split in splits:
@@ -405,13 +408,13 @@ def plot_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
                 x = df.loc[df["scenario"] == s, "available_cf"].dropna().to_numpy()
                 split_style = {'linestyle': '-', 'alpha': 1.0}
                 lbl = label(s)
-            
+
             if len(x) == 0:
                 continue
-            
+
             ax.hist(
                 x,
-                bins=bins,
+                bins=bin_edges,
                 density=True,
                 histtype="step",
                 label=lbl,
@@ -422,11 +425,8 @@ def plot_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None:
 
     ax.set_xlabel("Capacity factor [-]")
     ax.set_ylabel("Density [-]")
-    ax.set_xlim(left=0, right=1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.set_xlim(left=0)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -446,7 +446,7 @@ def plot_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
 
     for s in scenarios:
@@ -473,12 +473,9 @@ def plot_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
 
     ax.set_xlabel("Capacity factor [-]")
     ax.set_ylabel("CDF [-]")
-    ax.set_xlim(left=0, right=1)
+    ax.set_xlim(left=0)
     ax.set_ylim(0, 1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -502,14 +499,14 @@ def plot_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         n_splits = len(splits)
         n_scenarios = len(scenarios)
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         
         # Create grouped boxplots with splits on x-axis
         positions = []
         all_data = []
         colors = []
         
-        group_width = n_scenarios * 1.0
+        group_width = n_scenarios + 2
         for i, split in enumerate(splits):
             for j, scenario in enumerate(scenarios):
                 mask = (df['scenario'] == scenario) & (df['split'] == split)
@@ -540,14 +537,14 @@ def plot_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=_color_for(s), alpha=0.7, label=label(s)) 
                           for s in scenarios]
-        ax.legend(handles=legend_elements, title="Wake model", frameon=False,
-                 loc='best', fontsize=7)
+        ax.legend(handles=legend_elements, frameon=False,
+                 loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=len(scenarios))
         
     else:
         # Single split or no split column
         data = [df.loc[df["scenario"] == s, "available_cf"].dropna().to_numpy() for s in scenarios]
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         bp = ax.boxplot(
             data,
             tick_labels=[label(s) for s in scenarios],
@@ -574,9 +571,13 @@ def plot_dispatch_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
     
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
-    
+
+    # Shared bin edges across all series
+    all_vals = df["dispatch_cf"].dropna().to_numpy()
+    bin_edges = np.linspace(all_vals.min(), all_vals.max(), bins + 1) if len(all_vals) > 0 else bins
+
     for s in scenarios:
         for split in splits:
             if has_splits:
@@ -588,21 +589,18 @@ def plot_dispatch_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> None
                 x = df.loc[df["scenario"] == s, "dispatch_cf"].dropna().to_numpy()
                 split_style = {'linestyle': '-', 'alpha': 1.0}
                 lbl = label(s)
-            
+
             if len(x) == 0:
                 continue
-            
-            ax.hist(x, bins=bins, density=True, histtype="step", label=lbl,
-                   color=_color_for(s), linestyle=split_style['linestyle'], 
+
+            ax.hist(x, bins=bin_edges, density=True, histtype="step", label=lbl,
+                   color=_color_for(s), linestyle=split_style['linestyle'],
                    alpha=split_style['alpha'])
-    
+
     ax.set_xlabel("Dispatch capacity factor [-]")
     ax.set_ylabel("Density [-]")
-    ax.set_xlim(left=0, right=1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.set_xlim(left=0)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -617,7 +615,7 @@ def plot_dispatch_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
     
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
     
     for s in scenarios:
@@ -643,12 +641,9 @@ def plot_dispatch_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
     
     ax.set_xlabel("Dispatch capacity factor [-]")
     ax.set_ylabel("CDF [-]")
-    ax.set_xlim(left=0, right=1)
+    ax.set_xlim(left=0)
     ax.set_ylim(0, 1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -667,12 +662,12 @@ def plot_dispatch_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         n_splits = len(splits)
         n_scenarios = len(scenarios)
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 8.0 * cm), layout="constrained")
         positions = []
         all_data = []
         colors = []
         
-        group_width = n_scenarios * 1.0
+        group_width = n_scenarios + 2
         for i, split in enumerate(splits):
             for j, scenario in enumerate(scenarios):
                 mask = (df['scenario'] == scenario) & (df['split'] == split)
@@ -695,12 +690,12 @@ def plot_dispatch_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=_color_for(s), alpha=0.7, label=label(s)) 
                           for s in scenarios]
-        ax.legend(handles=legend_elements, title="Wake model", frameon=False,
-                 loc='best', fontsize=7)
+        ax.legend(handles=legend_elements, frameon=False,
+                 loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=len(scenarios))
     else:
         data = [df.loc[df["scenario"] == s, "dispatch_cf"].dropna().to_numpy() for s in scenarios]
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 8.0 * cm), layout="constrained")
         bp = ax.boxplot(data, tick_labels=[label(s) for s in scenarios], patch_artist=True,
                        showfliers=False, medianprops=dict(color="black"))
         _style_boxplot(bp, [_color_for(s) for s in scenarios], alpha=1.0)
@@ -722,9 +717,13 @@ def plot_curtailment_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> N
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
     
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
-    
+
+    # Shared bin edges across all series
+    all_vals = df["curtailment_cf"].dropna().to_numpy()
+    bin_edges = np.linspace(all_vals.min(), all_vals.max(), bins + 1) if len(all_vals) > 0 else bins
+
     for s in scenarios:
         for split in splits:
             if has_splits:
@@ -736,21 +735,18 @@ def plot_curtailment_cf_pdf(df: pd.DataFrame, *, out: Path, bins: int = 40) -> N
                 x = df.loc[df["scenario"] == s, "curtailment_cf"].dropna().to_numpy()
                 split_style = {'linestyle': '-', 'alpha': 1.0}
                 lbl = label(s)
-            
+
             if len(x) == 0:
                 continue
-            
-            ax.hist(x, bins=bins, density=True, histtype="step", label=lbl,
-                   color=_color_for(s), linestyle=split_style['linestyle'], 
+
+            ax.hist(x, bins=bin_edges, density=True, histtype="step", label=lbl,
+                   color=_color_for(s), linestyle=split_style['linestyle'],
                    alpha=split_style['alpha'])
-    
+
     ax.set_xlabel("Curtailment capacity factor [-]")
     ax.set_ylabel("Density [-]")
     ax.set_xlim(left=0)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -765,7 +761,7 @@ def plot_curtailment_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
     has_splits = 'split' in df.columns
     splits = sorted(df['split'].unique()) if has_splits else [None]
     
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
     
     for s in scenarios:
@@ -793,10 +789,7 @@ def plot_curtailment_cf_cdf(df: pd.DataFrame, *, out: Path) -> None:
     ax.set_ylabel("CDF [-]")
     ax.set_xlim(left=0)
     ax.set_ylim(0, 1)
-    if has_splits:
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=4, frameon=False, fontsize=6)
-    else:
-        ax.legend(loc='best', frameon=False, fontsize=9)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -815,12 +808,12 @@ def plot_curtailment_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         n_splits = len(splits)
         n_scenarios = len(scenarios)
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         positions = []
         all_data = []
         colors = []
         
-        group_width = n_scenarios * 1.0
+        group_width = n_scenarios + 2
         for i, split in enumerate(splits):
             for j, scenario in enumerate(scenarios):
                 mask = (df['scenario'] == scenario) & (df['split'] == split)
@@ -843,12 +836,12 @@ def plot_curtailment_cf_box(df: pd.DataFrame, *, out: Path) -> None:
         from matplotlib.patches import Patch
         legend_elements = [Patch(facecolor=_color_for(s), alpha=0.7, label=label(s)) 
                           for s in scenarios]
-        ax.legend(handles=legend_elements, title="Wake model", frameon=False,
-                 loc='best', fontsize=7)
+        ax.legend(handles=legend_elements, frameon=False,
+                 loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=len(scenarios))
     else:
         data = [df.loc[df["scenario"] == s, "curtailment_cf"].dropna().to_numpy() for s in scenarios]
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         bp = ax.boxplot(data, tick_labels=[label(s) for s in scenarios], patch_artist=True,
                        showfliers=False, medianprops=dict(color="black"))
         _style_boxplot(bp, [_color_for(s) for s in scenarios], alpha=1.0)
@@ -1072,7 +1065,7 @@ def plot_capacity_density_maps(
     n_panels = len(delta_gdfs)
     fig, axes = plt.subplots(
         1, n_panels, 
-        figsize=(16.4 * cm, 4.5 * cm), 
+        figsize=(FULL_WIDTH, 4.5 * cm), 
         sharex=True, 
         sharey=True, 
         layout="constrained"
@@ -1129,7 +1122,7 @@ def plot_wake_loss_vs_density(df: pd.DataFrame, *, out: Path) -> None:
     lw = style["lw"]
     ms = style["ms"]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
 
     scenarios = _sorted_scenarios(df["scenario"].unique().tolist())
     for s in scenarios:
@@ -1154,9 +1147,9 @@ def plot_wake_loss_vs_density(df: pd.DataFrame, *, out: Path) -> None:
                 yb.append(np.nanmean(y[m]))
             ax.plot(xb, yb, linewidth=lw, label=label(s), color=_color_for(s))
 
-    ax.set_xlabel(r"Installed density [MW km$^{-2}$]")
+    ax.set_xlabel(r"Maximum potential density [MW km$^{-2}$]")
     ax.set_ylabel("Wake loss multiplier [-]")
-    ax.legend(loc='best', frameon=False)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -1372,7 +1365,7 @@ def plot_capacity_density_maps(
     n_panels = len(delta_gdfs)
     fig, axes = plt.subplots(
         1, n_panels, 
-        figsize=(16.4 * cm, 4.5 * cm), 
+        figsize=(FULL_WIDTH, 4.5 * cm), 
         sharex=True, 
         sharey=True, 
         layout="constrained"
@@ -1430,7 +1423,7 @@ def _plot_choropleth(
     style = thesis_plot_style()
     cm = style["cm"]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 8.0 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 8.0 * cm), layout="constrained")
     gdf.plot(
         ax=ax,
         column=value_col,
@@ -1539,7 +1532,7 @@ def plot_resolution_lines(df: pd.DataFrame, *, y: str, out: Path) -> None:
     lw = style["lw"]
     ms = style["ms"]
 
-    fig, ax = plt.subplots(figsize=(16.4 * cm, 6.3 * cm), layout="constrained")
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.3 * cm), layout="constrained")
 
     for s in _sorted_scenarios(df["scenario"].unique().tolist()):
         d = df[df["scenario"] == s].sort_values("split_km2")
@@ -1556,7 +1549,7 @@ def plot_resolution_lines(df: pd.DataFrame, *, y: str, out: Path) -> None:
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, df["split_km2"].dropna().values)
     ax.set_ylabel(y.replace("_", r"\_"))
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.18), ncol=4, frameon=False, fontsize=6)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
     _savefig(fig, out)
 
 
@@ -1584,7 +1577,7 @@ def plot_transmission_expansion(df: pd.DataFrame, *, out: Path) -> None:
         n_scenarios = len(scenarios)
         n_splits = len(splits)
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
         
         bar_width = 0.8 / n_splits
         group_positions = np.arange(n_scenarios)
@@ -1610,8 +1603,8 @@ def plot_transmission_expansion(df: pd.DataFrame, *, out: Path) -> None:
         ax1.set_xticks(group_positions)
         ax1.set_xticklabels([label(s) for s in scenarios], rotation=15, ha="right")
         ax1.set_ylabel("AC line volume [MV·km]")
-        ax1.legend(title=r"$A_{region}^{max}$", frameon=False, fontsize=6,
-                   loc='upper center', bbox_to_anchor=(0.5, -0.22), ncol=n_splits)
+        ax1.legend(title=r"$A_{region}^{max}$", frameon=False,
+                   loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3)
         
         # DC line volume
         for j, split in enumerate(splits):
@@ -1636,7 +1629,7 @@ def plot_transmission_expansion(df: pd.DataFrame, *, out: Path) -> None:
         ax2.set_ylabel("DC line volume [MW·km]")
         
     else:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         
         x = np.arange(len(scenarios))
         colors = [_color_for(s) for s in scenarios]
@@ -1675,7 +1668,7 @@ def plot_system_cost_comparison(df: pd.DataFrame, *, out: Path) -> None:
         n_scenarios = len(scenarios)
         n_splits = len(splits)
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
         
         bar_width = 0.8 / n_splits
         group_positions = np.arange(n_scenarios)
@@ -1700,11 +1693,11 @@ def plot_system_cost_comparison(df: pd.DataFrame, *, out: Path) -> None:
         ax.set_xticks(group_positions)
         ax.set_xticklabels([label(s) for s in scenarios], rotation=15, ha="right")
         ax.set_ylabel("Total system cost [B€]")
-        ax.legend(title=r"$A_{region}^{max}$", frameon=False, fontsize=6,
-                  loc='upper center', bbox_to_anchor=(0.5, -0.22), ncol=n_splits)
+        ax.legend(title=r"$A_{region}^{max}$", frameon=False,
+                  loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3)
         
     else:
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         
         x = np.arange(len(scenarios))
         colors = [_color_for(s) for s in scenarios]
@@ -1735,7 +1728,7 @@ def plot_curtailment_analysis(df: pd.DataFrame, *, out: Path) -> None:
     if has_splits:
         splits = sorted(df['split'].unique())
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
         
         # Scatter plot with splits as marker types
         markers = ['o', 's', '^']
@@ -1771,11 +1764,11 @@ def plot_curtailment_analysis(df: pd.DataFrame, *, out: Path) -> None:
                                         markeredgecolor='black', markeredgewidth=0.8,
                                         label=_format_split_label(split)))
         
-        ax.legend(handles=legend_elements, frameon=False, fontsize=6,
-                  loc='upper center', bbox_to_anchor=(0.5, -0.18), ncol=4)
+        ax.legend(handles=legend_elements, frameon=False,
+                  loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4)
         
     else:
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         
         for s in scenarios:
             mask = df["scenario"] == s
@@ -1792,7 +1785,7 @@ def plot_curtailment_analysis(df: pd.DataFrame, *, out: Path) -> None:
         
         ax.set_xlabel("Curtailment [TWh]")
         ax.set_ylabel("Total system cost [B€]")
-        ax.legend(loc='best', frameon=False)
+        ax.legend(loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
 
     _savefig(fig, out)
 
@@ -1818,7 +1811,7 @@ def plot_system_bars(df: pd.DataFrame, *, y: str, out: Path) -> None:
         n_splits = len(splits)
         
         # Create grouped bar chart
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.5 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
         
         bar_width = 0.8 / n_splits
         group_positions = np.arange(n_scenarios)
@@ -1842,8 +1835,8 @@ def plot_system_bars(df: pd.DataFrame, *, y: str, out: Path) -> None:
         
         ax.set_xticks(group_positions)
         ax.set_xticklabels([label(s) for s in scenarios], rotation=15, ha="right")
-        ax.legend(title="Split", frameon=False, fontsize=6,
-                  loc='upper center', bbox_to_anchor=(0.5, -0.22), ncol=n_splits)
+        ax.legend(title="Split", frameon=False,
+                  loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3)
         
     else:
         # Single split or no split column - aggregate if needed
@@ -1854,7 +1847,7 @@ def plot_system_bars(df: pd.DataFrame, *, y: str, out: Path) -> None:
         
         d = df_agg.set_index("scenario").reindex(scenarios)[y]
         
-        fig, ax = plt.subplots(figsize=(16.4 * cm, 6.0 * cm), layout="constrained")
+        fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.0 * cm), layout="constrained")
         x = np.arange(len(scenarios))
         ax.bar(x, d.to_numpy(), color=[_color_for(s) for s in scenarios], 
                edgecolor="black", linewidth=0.6)
@@ -2110,7 +2103,7 @@ def plot_wake_models_density_two_areas(
     # constants
     loss_uniform = 1.0 - float(alpha_uniform)
 
-    fig, axes = plt.subplots(2, 2, figsize=(18 * cm, 14 * cm), dpi=dpi, sharey="row")
+    fig, axes = plt.subplots(2, 2, figsize=(18 * cm, 18 * cm), dpi=dpi, sharey="row")
     ax_TL, ax_TR = axes[0, 0], axes[0, 1]
     ax_ML, ax_MR = axes[1, 0], axes[1, 1]
 
@@ -2123,8 +2116,8 @@ def plot_wake_models_density_two_areas(
             x_grid, x_breaks_den, M_den
         )
 
-        ax_T.plot(x_grid, T_cap_x, color=_WAKE_COLORS["glaum"], lw=lw, label="Tiered capacity (total)")
-        ax_T.plot(x_grid, T_den_x, color=_WAKE_COLORS["new_more"], lw=lw, label="Tiered density (total)")
+        ax_T.plot(x_grid, T_cap_x, color=_WAKE_COLORS["glaum"], lw=lw, label="Tiered capacity")
+        ax_T.plot(x_grid, T_den_x, color=_WAKE_COLORS["new_more"], lw=lw, label="Tiered density")
         ax_T.axhline(loss_uniform, color=_WAKE_COLORS["standard"], ls="--", lw=lw*0.7, label="Uniform scaling")
         ax_T.axhline(0.0, color=_WAKE_COLORS["base"], ls=":", lw=lw*0.7, label="No-wake")
 
@@ -2144,8 +2137,8 @@ def plot_wake_models_density_two_areas(
         x_edges_cap, y_cap = _step_xy(np.asarray(x_breaks_cap, float), np.asarray(M_cap, float), x_max=x_max)
         x_edges_den_step, y_den = _step_xy(np.asarray(x_breaks_den_arr, float), np.asarray(M_den_arr, float), x_max=x_max)
 
-        ax_M.step(x_edges_cap, y_cap, where="post", color=_WAKE_COLORS["glaum"], lw=lw, label="Tiered capacity (marginal)")
-        ax_M.step(x_edges_den_step, y_den, where="post", color=_WAKE_COLORS["new_more"], lw=lw, label="Tiered density (marginal)")
+        ax_M.step(x_edges_cap, y_cap, where="post", color=_WAKE_COLORS["glaum"], lw=lw, label="Tiered capacity")
+        ax_M.step(x_edges_den_step, y_den, where="post", color=_WAKE_COLORS["new_more"], lw=lw, label="Tiered density")
         ax_M.axhline(loss_uniform, color=_WAKE_COLORS["standard"], ls="--", lw=lw*0.7, label="Uniform scaling")
         ax_M.axhline(0.0, color=_WAKE_COLORS["base"], ls=":", lw=lw*0.7, label="No-wake")
 
@@ -2186,7 +2179,7 @@ def plot_wake_models_density_two_areas(
             H.append(h)
             L.append(l)
 
-    fig.legend(H, L, loc="best", ncol=1, frameon=False)
+    fig.legend(H, L, loc="lower center", ncol=len(H), frameon=False)
     fig.tight_layout(rect=[0, 0.08, 1, 1])
 
     if savepath is not None:
@@ -2209,7 +2202,10 @@ def plot_wake_loss_vs_resolution(
     Expects a DataFrame with columns: scenario, split_km2, and a wake-loss metric
     (e.g. mean_wake_loss, median_available_cf, or similar).
     """
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    style = thesis_plot_style()
+    cm = style["cm"]
+    lw = style["lw"]
+    ms = style["ms"]
 
     # Detect the best available y-column
     y_col = None
@@ -2224,27 +2220,25 @@ def plot_wake_loss_vs_resolution(
             y_col = numeric_cols[0]
         else:
             print("[WARN] No suitable y column found in resolution CSV; skipping.")
-            plt.close(fig)
             return
+
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
 
     scenarios_present = df["scenario"].unique()
     for scen in WAKE_ORDER:
         if scen not in scenarios_present:
             continue
         sub = df[df["scenario"] == scen].sort_values("split_km2")
-        color = WAKE_MODEL_COLORS.get(canon(scen), None)
-        ax.plot(sub["split_km2"], sub[y_col], marker="o", linewidth=1.4,
-               label=label(canon(scen)), color=color)
+        ax.plot(sub["split_km2"], sub[y_col], marker="o", markersize=ms,
+               linewidth=lw, label=label(canon(scen)), color=_color_for(scen))
 
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, df["split_km2"].dropna().values)
     ylabel_nice = y_col.replace("_", " ").title()
     ax.set_ylabel(ylabel_nice)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=4, frameon=False, fontsize=6)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
-    plt.close(fig)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=4, frameon=False)
+    _savefig(fig, out)
 
 
 def plot_system_cost_delta_pct(
@@ -2257,9 +2251,13 @@ def plot_system_cost_delta_pct(
 
     Expects a DataFrame with columns: scenario, and one of objective/system_cost.
     """
+    style = thesis_plot_style()
+    cm = style["cm"]
+    lw = style["lw"]
+
     # Detect cost column
     cost_col = None
-    for candidate in ["objective", "system_cost", "total_cost"]:
+    for candidate in ["objective", "system_cost", "total_cost", "total_cost_eur"]:
         if candidate in df.columns:
             cost_col = candidate
             break
@@ -2277,7 +2275,7 @@ def plot_system_cost_delta_pct(
         print("[WARN] Baseline cost is 0 or NaN; skipping.")
         return
 
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 6.5 * cm), layout="constrained")
 
     scens = [s for s in WAKE_ORDER if s in df["scenario"].values and s != baseline]
     deltas = []
@@ -2287,26 +2285,24 @@ def plot_system_cost_delta_pct(
         val = df.loc[df["scenario"] == scen, cost_col].values[0]
         delta_pct = 100 * (val - baseline_val) / abs(baseline_val)
         deltas.append(delta_pct)
-        colors.append(WAKE_MODEL_COLORS.get(canon(scen), "#999999"))
+        colors.append(_color_for(scen))
         labels_list.append(label(canon(scen)))
 
     x = np.arange(len(labels_list))
-    bars = ax.bar(x, deltas, color=colors, edgecolor="black", linewidth=0.6)
+    bars = ax.bar(x, deltas, color=colors, edgecolor="black", linewidth=lw * 0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(labels_list, rotation=15, ha="right")
     ax.set_ylabel("System cost change vs baseline (%)")
-    ax.axhline(0, color="black", linewidth=0.5)
+    ax.axhline(0, color="black", linewidth=lw * 0.4)
     ax.grid(True, axis="y", alpha=0.3)
 
     # Annotate bars
     for i, v in enumerate(deltas):
         sign = "+" if v >= 0 else ""
         ax.text(i, v + (0.1 if v >= 0 else -0.15), f"{sign}{v:.2f}%",
-               ha="center", va="bottom" if v >= 0 else "top", fontsize=7)
+               ha="center", va="bottom" if v >= 0 else "top")
 
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
-    plt.close(fig)
+    _savefig(fig, out)
 
 
 # -----------------------------------------------------------------------------

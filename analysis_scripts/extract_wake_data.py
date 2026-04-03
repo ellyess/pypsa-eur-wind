@@ -268,42 +268,116 @@ def extract_cf_metrics(scenario_dirs: dict[tuple[str, int], Path]) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_region_areas(split: int, wake_extra_dir: Path | None = None) -> dict[str, float]:
+    """Load region areas (km²) from the cached regions GeoJSON for a given split size."""
+    if wake_extra_dir is None:
+        wake_extra_dir = _REPO_ROOT / "wake_extra" / "northsea"
+    candidates = [
+        wake_extra_dir / f"regions_offshore_s{split}.geojson",
+        wake_extra_dir / f"regions_offshore_{split}.geojson",
+    ]
+    for p in candidates:
+        if p.exists():
+            gdf = gpd.read_file(p)
+            return dict(zip(gdf["name"], gdf["area"]))
+    return {}
+
+
+def _region_name_from_gen(gen_name: str) -> str:
+    """Extract the region name from a generator name, stripping carrier and wake suffix.
+
+    Examples:
+        'DK0 0_00002 offwind-ac w1' -> 'DK0 0_00002'
+        'GB2 0_00001 offwind-float'  -> 'GB2 0_00001'
+    """
+    # Strip wake segment suffix (' w1', ' w2', ...)
+    name = gen_name.split(" w")[0] if " w" in gen_name else gen_name
+    # Strip carrier suffix (' offwind-ac', ' offwind-dc', ' offwind-float')
+    for carrier in (" offwind-ac", " offwind-dc", " offwind-float"):
+        if name.endswith(carrier):
+            name = name[: -len(carrier)]
+            break
+    return name
+
+
 def extract_wake_vs_density(scenario_dirs: dict[tuple[str, int], Path]) -> pd.DataFrame:
     """
     Extract wake losses vs installed capacity density.
-    
+
+    For 'new_more' and 'glaum' scenarios the wake factor and area are stored
+    directly on the generator.  For 'baseline' and 'standard', area comes from
+    the cached regions GeoJSON.
+
     Returns DataFrame with columns: scenario, split, density_mw_per_km2, wake_loss
     """
+    STANDARD_DERATE = 0.8855  # from add_electricity.py
+
     rows = []
-    
+
     for (scenario, split), sdir in scenario_dirs.items():
         n = load_network(sdir)
-        
-        if n is not None:
-            offshore = n.generators[n.generators.carrier.str.contains('offwind', case=False)]
-            
-            for idx, gen in offshore.iterrows():
-                # Get capacity
-                p_nom = gen.get('p_nom_opt', gen.get('p_nom', 0))
-                
-                # Get area (you may need to load this from regions)
-                # Placeholder: assume area info is in bus or separate regions file
-                area_km2 = 100  # Replace with actual area lookup
-                
-                density = p_nom / area_km2 if area_km2 > 0 else 0
-                wake_loss = 1.0 - gen.get('p_nom_max_pu', 1.0)
-                
-                rows.append({
-                    'scenario': scenario,
-                    'split': split,
-                    'density_mw_per_km2': density,
-                    'wake_loss': wake_loss
-                })
-    
+        if n is None:
+            continue
+
+        offshore = n.generators[n.generators.carrier.str.contains('offwind', case=False)]
+        if offshore.empty:
+            continue
+
+        has_area_col = "area" in offshore.columns
+        has_wake_cols = any(c.startswith("factor_wake_") for c in offshore.columns)
+
+        # Load region areas from GeoJSON when the network lacks an area column
+        region_areas: dict[str, float] = {}
+        if not has_area_col:
+            region_areas = _load_region_areas(split)
+
+        for gen_name, gen in offshore.iterrows():
+            p_nom_max = gen.get('p_nom_max', 0)
+            if p_nom_max <= 0:
+                continue
+
+            # --- Area ---
+            if has_area_col and pd.notna(gen.get("area")) and gen["area"] > 0:
+                area_km2 = float(gen["area"])
+            else:
+                region = _region_name_from_gen(gen_name)
+                area_km2 = region_areas.get(region, 0.0)
+            if area_km2 <= 0:
+                continue
+
+            density = p_nom_max / area_km2
+
+            # --- Wake loss ---
+            if has_wake_cols:
+                # Determine which segment this generator is (e.g. ' w3' -> 3)
+                seg = 1
+                if " w" in gen_name:
+                    try:
+                        seg = int(gen_name.rsplit(" w", 1)[1])
+                    except (ValueError, IndexError):
+                        seg = 1
+                raw = gen.get(f"factor_wake_{seg}", 0.0)
+                wake_loss = float(raw) if pd.notna(raw) else 0.0
+            elif scenario == "standard":
+                wake_loss = 1.0 - STANDARD_DERATE
+            else:
+                # baseline — no wake loss
+                wake_loss = 0.0
+
+            rows.append({
+                'scenario': scenario,
+                'split': split,
+                'density_mw_per_km2': density,
+                'wake_loss': wake_loss,
+            })
+
     if not rows:
         print("Warning: No wake vs density data found")
         return pd.DataFrame(columns=['scenario', 'split', 'density_mw_per_km2', 'wake_loss'])
-    
+
     return pd.DataFrame(rows)
 
 
@@ -385,24 +459,27 @@ def extract_resolution_metrics(results_base: Path, scenario: str, splits: list[i
     """
     Extract metrics across different spatial resolutions (split sizes).
     Calculated directly from network object.
-    
-    Returns DataFrame with columns: scenario, split_km2, offshore_capacity_gw, total_cost_beur, n_offshore_buses
+
+    Returns DataFrame with columns: scenario, split_km2, offshore_capacity_gw,
+    total_cost_beur, n_offshore_buses, mean_wake_loss
     """
     if pypsa is None:
         print("Error: pypsa not available, cannot calculate from networks")
         return pd.DataFrame()
-    
+
+    STANDARD_DERATE = 0.8855
+
     rows = []
-    
+
     for split in splits:
         pattern = f"{scenario}-s{split}-biasFalse"
         sdir = results_base / pattern
-        
+
         if not sdir.exists():
             continue
-        
+
         metrics = {'scenario': scenario, 'split_km2': split}
-        
+
         n = load_network(sdir)
         if n is not None:
             try:
@@ -410,15 +487,49 @@ def extract_resolution_metrics(results_base: Path, scenario: str, splits: list[i
                 offshore = n.generators[n.generators.carrier.str.contains('offwind', case=False, na=False)]
                 metrics['offshore_capacity_gw'] = offshore['p_nom_opt'].sum() / 1e3
                 metrics['n_offshore_buses'] = len(offshore['bus'].unique())
-                
+
                 # System cost
                 if hasattr(n, 'objective'):
                     metrics['total_cost_beur'] = float(n.objective) / 1e9
+
+                # Mean wake loss (capacity-weighted)
+                has_wake_cols = any(c.startswith("factor_wake_") for c in offshore.columns)
+                wake_losses = []
+                weights = []
+                for gen_name, gen in offshore.iterrows():
+                    p_nom_opt = gen.get('p_nom_opt', 0)
+                    if p_nom_opt <= 0:
+                        continue
+
+                    if has_wake_cols:
+                        seg = 1
+                        if " w" in gen_name:
+                            try:
+                                seg = int(gen_name.rsplit(" w", 1)[1])
+                            except (ValueError, IndexError):
+                                seg = 1
+                        raw = gen.get(f"factor_wake_{seg}", 0.0)
+                        wl = float(raw) if pd.notna(raw) else 0.0
+                    elif scenario == "standard":
+                        wl = 1.0 - STANDARD_DERATE
+                    else:
+                        wl = 0.0
+
+                    wake_losses.append(wl)
+                    weights.append(p_nom_opt)
+
+                if weights:
+                    w = np.array(weights)
+                    wl = np.array(wake_losses)
+                    metrics['mean_wake_loss'] = float(np.average(wl, weights=w))
+                else:
+                    metrics['mean_wake_loss'] = 0.0
+
             except Exception as e:
                 print(f"  Warning: Error extracting resolution metrics for split {split}: {e}")
-        
+
         rows.append(metrics)
-    
+
     return pd.DataFrame(rows)
 
 

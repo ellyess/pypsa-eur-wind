@@ -1,6 +1,8 @@
 base-s100000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: False
     renewable:
@@ -19,8 +21,10 @@ base-s100000-biasFalse:
 
 
 base-s50000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 50000
         onshore_threshold: False
     renewable:
@@ -39,8 +43,10 @@ base-s50000-biasFalse:
 
 
 base-s10000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 10000
         onshore_threshold: False
     renewable:
@@ -59,8 +65,10 @@ base-s10000-biasFalse:
 
 
 base-s5000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 5000
         onshore_threshold: False
     renewable:
@@ -79,8 +87,10 @@ base-s5000-biasFalse:
 
 
 base-s1000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 1000
         onshore_threshold: False
     renewable:
@@ -99,8 +109,10 @@ base-s1000-biasFalse:
 
 
 standard-s100000-biasFalse:
-    offshore_mods:
-        wake_model: standard
+    electricity:
+        wake_model:
+            method: standard
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: False
     renewable:
@@ -119,8 +131,10 @@ standard-s100000-biasFalse:
 
 
 standard-s50000-biasFalse:
-    offshore_mods:
-        wake_model: standard
+    electricity:
+        wake_model:
+            method: standard
+    spatial_mods:
         offshore_threshold: 50000
         onshore_threshold: False
     renewable:
@@ -139,8 +153,10 @@ standard-s50000-biasFalse:
 
 
 standard-s10000-biasFalse:
-    offshore_mods:
-        wake_model: standard
+    electricity:
+        wake_model:
+            method: standard
+    spatial_mods:
         offshore_threshold: 10000
         onshore_threshold: False
     renewable:
@@ -159,8 +175,10 @@ standard-s10000-biasFalse:
 
 
 standard-s5000-biasFalse:
-    offshore_mods:
-        wake_model: standard
+    electricity:
+        wake_model:
+            method: standard
+    spatial_mods:
         offshore_threshold: 5000
         onshore_threshold: False
     renewable:
@@ -179,8 +197,10 @@ standard-s5000-biasFalse:
 
 
 standard-s1000-biasFalse:
-    offshore_mods:
-        wake_model: standard
+    electricity:
+        wake_model:
+            method: standard
+    spatial_mods:
         offshore_threshold: 1000
         onshore_threshold: False
     renewable:
@@ -199,8 +219,10 @@ standard-s1000-biasFalse:
 
 
 glaum-s100000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
+    electricity:
+        wake_model:
+            method: glaum
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: False
     renewable:
@@ -219,8 +241,10 @@ glaum-s100000-biasFalse:
 
 
 glaum-s50000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
+    electricity:
+        wake_model:
+            method: glaum
+    spatial_mods:
         offshore_threshold: 50000
         onshore_threshold: False
     renewable:
@@ -239,8 +263,10 @@ glaum-s50000-biasFalse:
 
 
 glaum-s10000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
+    electricity:
+        wake_model:
+            method: glaum
+    spatial_mods:
         offshore_threshold: 10000
         onshore_threshold: False
     renewable:
@@ -259,8 +285,10 @@ glaum-s10000-biasFalse:
 
 
 glaum-s5000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
+    electricity:
+        wake_model:
+            method: glaum
+    spatial_mods:
         offshore_threshold: 5000
         onshore_threshold: False
     renewable:
@@ -279,8 +307,10 @@ glaum-s5000-biasFalse:
 
 
 glaum-s1000-biasFalse:
-    offshore_mods:
-        wake_model: glaum
+    electricity:
+        wake_model:
+            method: glaum
+    spatial_mods:
         offshore_threshold: 1000
         onshore_threshold: False
     renewable:
@@ -299,8 +329,10 @@ glaum-s1000-biasFalse:
 
 
 new_more-s100000-biasFalse:
-    offshore_mods:
-        wake_model: new_more
+    electricity:
+        wake_model:
+            method: new_more
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: False
     renewable:
@@ -319,8 +351,10 @@ new_more-s100000-biasFalse:
 
 
 new_more-s50000-biasFalse:
-    offshore_mods:
-        wake_model: new_more
+    electricity:
+        wake_model:
+            method: new_more
+    spatial_mods:
         offshore_threshold: 50000
         onshore_threshold: False
     renewable:
@@ -339,8 +373,10 @@ new_more-s50000-biasFalse:
 
 
 new_more-s10000-biasFalse:
-    offshore_mods:
-        wake_model: new_more
+    electricity:
+        wake_model:
+            method: new_more
+    spatial_mods:
         offshore_threshold: 10000
         onshore_threshold: False
     renewable:
@@ -359,8 +395,10 @@ new_more-s10000-biasFalse:
 
 
 new_more-s5000-biasFalse:
-    offshore_mods:
-        wake_model: new_more
+    electricity:
+        wake_model:
+            method: new_more
+    spatial_mods:
         offshore_threshold: 5000
         onshore_threshold: False
     renewable:
@@ -379,8 +417,10 @@ new_more-s5000-biasFalse:
 
 
 new_more-s1000-biasFalse:
-    offshore_mods:
-        wake_model: new_more
+    electricity:
+        wake_model:
+            method: new_more
+    spatial_mods:
         offshore_threshold: 1000
         onshore_threshold: False
     renewable:

@@ -1,0 +1,38 @@
+scenario_id,chapter,scenario_label,display_name,wake_model,wake_display,bias_correction,bias_display,resolution_km2,color_hex,description
+ch5_base_1M,5,base,Baseline,base,No wake,False,No correction,1000000,#4D4D4D,Coarsest resolution baseline
+ch5_base_100k,5,base,Baseline,base,No wake,False,No correction,100000,#4D4D4D,Medium-coarse baseline
+ch5_base_50k,5,base,Baseline,base,No wake,False,No correction,50000,#4D4D4D,Medium baseline
+ch5_base_10k,5,base,Baseline,base,No wake,False,No correction,10000,#4D4D4D,Fine baseline
+ch5_base_5k,5,base,Baseline,base,No wake,False,No correction,5000,#4D4D4D,Very fine baseline
+ch5_base_1k,5,base,Baseline,base,No wake,False,No correction,1000,#4D4D4D,Ultra-fine baseline
+ch6_base,6,base,Baseline,base,No wake,False,No correction,100000,#4D4D4D,No wake losses
+ch6_standard,6,standard,Uniform,standard,Uniform wake,False,No correction,100000,#D55E00,Uniform wake adjustment
+ch6_glaum,6,glaum,Tiered-capacity,glaum,Capacity-based tiers,False,No correction,100000,#0072B2,Capacity-threshold wake tiers
+ch6_new_more,6,new_more,Tiered-density,new_more,Density-based tiers,False,No correction,100000,#009E73,Density-threshold wake tiers (thesis)
+ch7_raw,7,biasFalse,Baseline,standard,Uniform wake,False,No correction,100000,#4D4D4D,Raw ERA5 data
+ch7_uniform,7,biasUniform,Uniform,standard,Uniform wake,Uniform,Constant offset,100000,#D55E00,Uniform bias correction
+ch7_pyvwf,7,biasTrue,PyVWF,standard,Uniform wake,True,PyVWF,100000,#5DAE8B,Physics-derived bias correction
+ch8a_base_100k,8a,base,Baseline,base,No wake,False,No correction,100000,#4D4D4D,Baseline (coarse)
+ch8a_base_50k,8a,base,Baseline,base,No wake,False,No correction,50000,#4D4D4D,Baseline (medium)
+ch8a_base_10k,8a,base,Baseline,base,No wake,False,No correction,10000,#4D4D4D,Baseline (fine)
+ch8a_base_5k,8a,base,Baseline,base,No wake,False,No correction,5000,#4D4D4D,Baseline (very fine)
+ch8a_base_1k,8a,base,Baseline,base,No wake,False,No correction,1000,#4D4D4D,Baseline (ultra-fine)
+ch8a_bias_100k,8a,bias,PyVWF bias,base,No wake,True,PyVWF,100000,#5DAE8B,Bias only (coarse)
+ch8a_bias_50k,8a,bias,PyVWF bias,base,No wake,True,PyVWF,50000,#5DAE8B,Bias only (medium)
+ch8a_bias_10k,8a,bias,PyVWF bias,base,No wake,True,PyVWF,10000,#5DAE8B,Bias only (fine)
+ch8a_bias_5k,8a,bias,PyVWF bias,base,No wake,True,PyVWF,5000,#5DAE8B,Bias only (very fine)
+ch8a_bias_1k,8a,bias,PyVWF bias,base,No wake,True,PyVWF,1000,#5DAE8B,Bias only (ultra-fine)
+ch8a_wake_100k,8a,wake,Tiered-density wake,new_more,Density-based tiers,False,No correction,100000,#2F4B7C,Wake only (coarse)
+ch8a_wake_50k,8a,wake,Tiered-density wake,new_more,Density-based tiers,False,No correction,50000,#2F4B7C,Wake only (medium)
+ch8a_wake_10k,8a,wake,Tiered-density wake,new_more,Density-based tiers,False,No correction,10000,#2F4B7C,Wake only (fine)
+ch8a_wake_5k,8a,wake,Tiered-density wake,new_more,Density-based tiers,False,No correction,5000,#2F4B7C,Wake only (very fine)
+ch8a_wake_1k,8a,wake,Tiered-density wake,new_more,Density-based tiers,False,No correction,1000,#2F4B7C,Wake only (ultra-fine)
+ch8a_both_100k,8a,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,100000,#8172B2,Combined corrections (coarse)
+ch8a_both_50k,8a,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,50000,#8172B2,Combined corrections (medium)
+ch8a_both_10k,8a,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,10000,#8172B2,Combined corrections (fine)
+ch8a_both_5k,8a,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,5000,#8172B2,Combined corrections (very fine)
+ch8a_both_1k,8a,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,1000,#8172B2,Combined corrections (ultra-fine)
+ch8b_base_100k,8b,base,Baseline,base,No wake,False,No correction,100000,#4D4D4D,Baseline sector-coupled (coarse)
+ch8b_base_10k,8b,base,Baseline,base,No wake,False,No correction,10000,#4D4D4D,Baseline sector-coupled (fine)
+ch8b_both_100k,8b,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,100000,#8172B2,Combined sector-coupled (coarse)
+ch8b_both_10k,8b,bias+wake,Bias + wake,new_more,Density-based tiers,True,PyVWF,10000,#8172B2,Combined sector-coupled (fine)

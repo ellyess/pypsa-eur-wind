@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pypsa
 
-from plotting_style import thesis_plot_style, format_axes_standard
+from plotting_style import thesis_plot_style, format_axes_standard, savefig_thesis
 from thesis_colors import label, THESIS_LABELS, THESIS_COLORS
 
 from network_utils import (
@@ -28,6 +28,9 @@ except ImportError:
 # Apply thesis-wide plotting style
 _style = thesis_plot_style()
 cm, lw, ms, dpi = _style['cm'], _style['lw'], _style['ms'], _style['dpi']
+FULL_WIDTH = _style['FULL_WIDTH']
+HALF_WIDTH = _style['HALF_WIDTH']
+MAP_WIDTH = _style['MAP_WIDTH']
 
 # -----------------------------
 # Nice names (applied to plots/tables where relevant)
@@ -241,7 +244,7 @@ def plot_cdf_and_delta(
             x2, y2 = _empirical_cdf(v2)
 
     # CDF plot
-    plt.figure(figsize=(5.2, 3.2))
+    plt.figure(figsize=(HALF_WIDTH, 3.2))
     plt.plot(x0, y0, label=nice("bias_off"), linewidth=2, color=THESIS_COLORS.get("base", None))
     plt.plot(x1, y1, label=nice("bias_on"), linewidth=2, color=THESIS_COLORS.get("bias", None))
     if x2 is not None and y2 is not None and len(x2) > 0:
@@ -252,7 +255,7 @@ def plot_cdf_and_delta(
     plt.legend(loc='best', frameon=False)
     plt.tight_layout()
     format_axes_standard(plt.gcf())
-    plt.savefig(out_cdf, dpi=300, bbox_inches="tight")
+    plt.savefig(out_cdf, dpi=600, bbox_inches="tight")
     plt.close()
 
     # Delta CDF plot on common x-grid
@@ -261,7 +264,7 @@ def plot_cdf_and_delta(
     c1 = np.interp(x, x1, y1)
     dc1 = c1 - c0
 
-    plt.figure(figsize=(5.2, 3.2))
+    plt.figure(figsize=(HALF_WIDTH, 3.2))
     plt.plot(x, dc1, label=f"{nice('bias_on')} − {nice('bias_off')}", linewidth=3, color=THESIS_COLORS.get("bias", None))
     if x2 is not None and y2 is not None and len(x2) > 0:
         c2 = np.interp(x, x2, y2)
@@ -274,7 +277,7 @@ def plot_cdf_and_delta(
     plt.legend(loc='best', frameon=False)
     plt.tight_layout()
     format_axes_standard(plt.gcf())
-    plt.savefig(out_delta, dpi=300, bbox_inches="tight")
+    plt.savefig(out_delta, dpi=600, bbox_inches="tight")
     plt.close()
 
 
@@ -415,7 +418,8 @@ def plot_grouped_deltas(
     x = np.arange(len(df))
     width = 0.40 if b is not None else 0.60
 
-    plt.figure(figsize=(max(8, 0.45 * len(df)), 5))
+    fig_w_cm = max(min(HALF_WIDTH / cm, 0.45 * len(df)), HALF_WIDTH / cm * 0.75)
+    plt.figure(figsize=(fig_w_cm * cm, fig_w_cm * 1.15 * cm))
     plt.axhline(0.0, linewidth=1, color="black", linestyle="--")
 
     plt.bar(x - (width / 2 if b is not None else 0), df["d_pyvwf"].to_numpy(), width=width, label=label_a, color=THESIS_COLORS.get("bias", None))
@@ -429,7 +433,7 @@ def plot_grouped_deltas(
     plt.legend(loc='best', frameon=False)
     plt.tight_layout()
     format_axes_standard(plt.gcf())
-    plt.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.savefig(outpath, dpi=600, bbox_inches="tight")
     plt.close()
 
 
@@ -456,7 +460,7 @@ def plot_system_cost_bar(
     color_map = {"Baseline": THESIS_COLORS.get("base"), "PyVWF": THESIS_COLORS.get("bias"), "Uniform": THESIS_COLORS.get("standard")}
     colors = [color_map.get(l, "#999999") for l in labels_list]
 
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(0.65 * FULL_WIDTH, 3.2), dpi=300)
     x = np.arange(len(labels_list))
     bars = ax.bar(x, values, color=colors, edgecolor="black", linewidth=0.6)
     ax.set_xticks(x)
@@ -471,11 +475,11 @@ def plot_system_cost_bar(
         delta_pct = 100 * (v - base_cost) / abs(base_cost) if base_cost != 0 else 0
         sign = "+" if delta_pct >= 0 else ""
         ax.text(i, v + 0.002 * abs(base_cost), f"{sign}{delta_pct:.2f}%",
-               ha="center", va="bottom", fontsize=7)
+               ha="center", va="bottom")
 
     fig.tight_layout()
     format_axes_standard(fig)
-    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    fig.savefig(outpath, dpi=600, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -489,7 +493,7 @@ def plot_duration_curve(
     outpath: Path,
 ) -> None:
     """Wind output duration curve (sorted dispatch) for each bias scenario."""
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.2), dpi=300)
 
     for n, name, color_key in [
         (n0, "Baseline", "base"),
@@ -516,7 +520,7 @@ def plot_duration_curve(
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     format_axes_standard(fig)
-    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    fig.savefig(outpath, dpi=600, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -544,7 +548,7 @@ def plot_bias_correction_map(
         print("[WARN] Bias correction file has neither 'scalar' nor 'offset' variable.")
         return
 
-    fig, axes = plt.subplots(1, n_panels, figsize=(5.2 * n_panels, 4.0), dpi=300)
+    fig, axes = plt.subplots(1, n_panels, figsize=(MAP_WIDTH, 4.0), dpi=300)
     if n_panels == 1:
         axes = [axes]
 
@@ -552,13 +556,18 @@ def plot_bias_correction_map(
     if has_scalar:
         ax = axes[panel_idx]
         scalar = ds["scalar"].squeeze()
+        svals = scalar.values[np.isfinite(scalar.values)]
+        vlo = max(np.percentile(svals, 1), 0.5)
+        vhi = min(np.percentile(svals, 99), 1.5)
+        # Symmetric around 1.0
+        vlim = max(abs(1.0 - vlo), abs(vhi - 1.0))
         if scalar.ndim == 2:
             im = ax.pcolormesh(scalar.x, scalar.y, scalar.values, cmap="RdBu_r",
-                              vmin=0.85, vmax=1.15, shading="auto")
+                              vmin=1.0 - vlim, vmax=1.0 + vlim, shading="auto")
         else:
             im = ax.scatter(scalar.x, scalar.y, c=scalar.values, cmap="RdBu_r",
-                          vmin=0.85, vmax=1.15, s=2)
-        fig.colorbar(im, ax=ax, shrink=0.8, label="Scalar [-]")
+                          vmin=1.0 - vlim, vmax=1.0 + vlim, s=2)
+        fig.colorbar(im, ax=ax, shrink=0.45, label="Scalar [-]")
         ax.set_title("Bias correction: scalar")
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
@@ -575,7 +584,7 @@ def plot_bias_correction_map(
         else:
             im = ax.scatter(offset.x, offset.y, c=offset.values, cmap="RdBu_r",
                           vmin=-vlim, vmax=vlim, s=2)
-        fig.colorbar(im, ax=ax, shrink=0.8, label="Offset [m/s]")
+        fig.colorbar(im, ax=ax, shrink=0.45, label="Offset [m/s]")
         ax.set_title("Bias correction: offset")
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
@@ -584,7 +593,7 @@ def plot_bias_correction_map(
     ds.close()
     fig.tight_layout()
     format_axes_standard(fig)
-    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    fig.savefig(outpath, dpi=600, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -803,7 +812,7 @@ def main():
     if args.bias_file and Path(args.bias_file).exists():
         plot_bias_correction_map(args.bias_file, outpath=outdir / "bias_correction_map.png")
     else:
-        for bias_file in ["bias-extra/atlite_bias.nc", "../bias-extra/atlite_bias.nc", "data/atlite_bias.nc"]:
+        for bias_file in ["bias-extra/europe_corrections_idw_best.nc", "../bias-extra/europe_corrections_idw_best.nc", "bias-extra/atlite_bias.nc", "../bias-extra/atlite_bias.nc"]:
             if Path(bias_file).exists():
                 plot_bias_correction_map(bias_file, outpath=outdir / "bias_correction_map.png")
                 break

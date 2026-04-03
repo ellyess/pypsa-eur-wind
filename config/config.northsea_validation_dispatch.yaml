@@ -1,0 +1,125 @@
+# Tier 2 validation config: dispatch-only with actual 2023 installed capacities
+# No capacity expansion, actual renewable capacities from IRENASTAT
+# Overrides config.default.yaml — only fork-specific values included
+
+run:
+  prefix: "thesis-validation-2023-northsea"
+  name:
+    - base-s100000-biasFalse
+    - base-s100000-biasidw
+    - base-s100000-biaskriging
+  scenarios:
+    enable: true
+    file: config/scenarios-validation.yaml
+  shared_resources:
+    policy: base
+
+scenario:
+  clusters:
+    - 10
+  planning_horizons:
+    - 2030
+
+countries: ['BE', 'DK', 'NL', 'GB', 'FR', 'DE', 'NO']
+
+snapshots:
+  start: "2023-01-01"
+  end: "2024-01-01"
+
+# Fork-specific: variable spatial resolution and offshore mode
+spatial_mods:
+  mode: standard
+  sea_shape: data/north_sea_shape_updated.geojson
+  shared_files: northsea
+  offshore_threshold: 100000
+  onshore_threshold: 100000
+
+electricity:
+  wake_model:
+    method: base
+  extendable_carriers:
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
+  powerplants_filter: (DateOut >= 2023 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  estimate_renewable_capacities:
+    enable: true
+    from_powerplantmatching: false
+    from_irenastat: true
+    year: 2023
+  transmission_limit: vopt
+
+atlite:
+  default_cutout: europe-2023-sarah3-era5
+  nprocesses: 2
+  cutouts:
+    europe-2023-sarah3-era5:
+      module: [sarah, era5]
+      x: [-12., 42.]
+      y: [33., 72.]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+
+renewable:
+  onwind:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      add_cutout_windspeed: true
+  offwind-ac:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    min_shore_distance: 1000
+    landfall_length: 10
+  offwind-dc:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    landfall_length: 10
+  offwind-float:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    min_shore_distance: 1000
+    landfall_length: 10
+
+costs:
+  year: 2030
+
+lines:
+  max_extension: 0
+
+links:
+  max_extension: 0
+
+clustering:
+  temporal:
+    resolution_elec: 6h
+    resolution_sector: 6h
+
+solving:
+  options:
+    noisy_costs: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 0
+  solver_options:
+    gurobi-default:
+      threads: 8
+      BarConvTol: 1.e-6
+  mem_mb: 100000
+  runtime: 6h

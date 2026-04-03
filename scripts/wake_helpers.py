@@ -55,9 +55,9 @@ _new_more_spec = tiered_density_wake_spec
 # ---------------------------------------------------------------------------
 
 
-def get_offshore_mods(config: dict) -> dict:
-    """Return the ``offshore_mods`` sub-dictionary with a safe default."""
-    return config.get("offshore_mods", {})
+def get_spatial_mods(config: dict) -> dict:
+    """Return the ``spatial_mods`` sub-dictionary with a safe default."""
+    return config.get("spatial_mods", {})
 
 
 def _wind_threshold_key(technology: str) -> Optional[str]:
@@ -89,7 +89,7 @@ def get_threshold(mods: dict, technology: str) -> Optional[int]:
     try:
         ival = int(val)
     except (TypeError, ValueError) as e:
-        raise ValueError(f"Invalid config offshore_mods.{key}={val!r}") from e
+        raise ValueError(f"Invalid config spatial_mods.{key}={val!r}") from e
 
     if ival <= 0:
         return None
@@ -101,7 +101,7 @@ def get_threshold(mods: dict, technology: str) -> Optional[int]:
 def get_wake_coefficients(mods: dict, method: str) -> dict:
     """Return wake coefficients for *method* (legacy interface).
 
-    Reads from ``offshore_mods.wake_coefficients.<method>`` and merges
+    Reads from ``spatial_mods.wake_coefficients.<method>`` and merges
     with built-in defaults.
     """
     from wake_effects import _DEFAULTS

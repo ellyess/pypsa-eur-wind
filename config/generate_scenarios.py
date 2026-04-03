@@ -144,8 +144,12 @@ def generate_scenarios(profile_name: str) -> dict:
             renewable[tech] = tech_block
 
         scenarios[name] = {
-            "offshore_mods": {
-                "wake_model": wake_model,
+            "electricity": {
+                "wake_model": {
+                    "method": wake_model,
+                },
+            },
+            "spatial_mods": {
                 "offshore_threshold": threshold,
                 "onshore_threshold": onshore_thr,
             },

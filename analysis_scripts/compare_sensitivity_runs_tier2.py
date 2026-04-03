@@ -35,8 +35,13 @@ import matplotlib.pyplot as plt
 
 import pypsa
 
-from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard, savefig_thesis
 from thesis_colors import THESIS_COLORS, THESIS_LABELS, label as get_label
+
+_style = thesis_plot_style()
+cm = _style['cm']
+FULL_WIDTH = _style['FULL_WIDTH']
+HALF_WIDTH = _style['HALF_WIDTH']
 
 from network_utils import (
     WAKE_ALIASES,
@@ -98,21 +103,29 @@ def _scenario_order(compare: list[str] | None) -> list[str]:
 
 
 def plot_lines_by_resolution(df: pd.DataFrame, ycol: str, ylabel: str, outpath: Path, compare: list[str], title: str):
-    fig, ax = plt.subplots(figsize=(5.2, 3.0), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.0), dpi=300)
 
     res = sorted(df["resolution"].unique())
     # Tier-2 often uses only 1-2 resolutions; still fine on log axis
-    for scen in compare:
+    _linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 2))]
+    for s_idx, scen in enumerate(compare):
         dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
         c = get_color(scen)
-        ax.plot(res, dd[ycol].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
+        ls = _linestyles[s_idx % len(_linestyles)]
+        ax.plot(res, dd[ycol].values, marker="o", linewidth=1.6, markersize=5, label=get_label(scen), color=c, linestyle=ls)
 
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, res)
     ax.set_ylabel(ylabel)
-    ax.set_title(title, fontsize=9)
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='best', frameon=False, fontsize=8)
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.18),
+        frameon=False,
+        ncol=min(len(compare), 3),
+        fontsize=6,
+    )
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -120,7 +133,7 @@ def plot_lines_by_resolution(df: pd.DataFrame, ycol: str, ylabel: str, outpath: 
 
 
 def plot_capacity_on_off(df: pd.DataFrame, outpath: Path, compare: list[str]):
-    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.0), dpi=300, sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FULL_WIDTH, 3.0), dpi=300, sharex=True)
     res = sorted(df["resolution"].unique())
 
     for ax, tech, col in [
@@ -133,11 +146,11 @@ def plot_capacity_on_off(df: pd.DataFrame, outpath: Path, compare: list[str]):
             ax.plot(res, dd[col].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
         apply_spatial_resolution_axis(ax, annotate=False)
         add_resolution_markers(ax, res)
-        ax.set_title(get_label(tech), fontsize=9)
+        ax.set_title(get_label(tech))
         ax.set_ylabel("Capacity (GW)")
         ax.grid(True, alpha=0.3)
 
-    axes[1].legend(loc='best', frameon=False, fontsize=8)
+    axes[1].legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -146,7 +159,7 @@ def plot_capacity_on_off(df: pd.DataFrame, outpath: Path, compare: list[str]):
 
 def plot_sector_coupling(df: pd.DataFrame, outpath: Path, compare: list[str]):
     # Two panels: electrolyser cap (GW) and H2 production (TWh)
-    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.0), dpi=300, sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FULL_WIDTH, 3.0), dpi=300, sharex=True)
     res = sorted(df["resolution"].unique())
 
     for ax, col, ylabel, title in [
@@ -159,11 +172,11 @@ def plot_sector_coupling(df: pd.DataFrame, outpath: Path, compare: list[str]):
             ax.plot(res, dd[col].values, marker="o", linewidth=1.6, label=get_label(scen), color=c)
         apply_spatial_resolution_axis(ax, annotate=False)
         add_resolution_markers(ax, res)
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title)
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
 
-    axes[1].legend(loc='best', frameon=False, fontsize=8)
+    axes[1].legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -214,7 +227,10 @@ def plot_cf_ecdf_2x2(cf_long: pd.DataFrame, outpath: Path, metric: str, ylabel: 
         warnings.warn(f"No CF data for {metric}; skipping {outpath.name}")
         return
 
-    fig, axes = plt.subplots(2, len(resolutions), figsize=(8.8, 5.2), dpi=300, sharex=True, sharey=True)
+    # Distinct line styles for each scenario
+    _linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 2))]
+
+    fig, axes = plt.subplots(2, len(resolutions), figsize=(FULL_WIDTH, 5.2), dpi=300, sharex=True, sharey=True)
     if len(resolutions) == 1:
         axes = np.array([[axes[0]], [axes[1]]])  # ensure 2x1
 
@@ -226,23 +242,32 @@ def plot_cf_ecdf_2x2(cf_long: pd.DataFrame, outpath: Path, metric: str, ylabel: 
                 ax.set_axis_off()
                 continue
 
-            for scen in compare:
+            for s_idx, scen in enumerate(compare):
                 vals = d.loc[d["scenario"] == scen, metric].dropna().values
                 if vals.size == 0:
                     continue
                 x, y = _ecdf(vals)
                 c = get_color(scen)
-                ax.plot(x, y, linewidth=1.6, label=get_label(scen), color=c)
+                ls = _linestyles[s_idx % len(_linestyles)]
+                ax.plot(x, y, linewidth=1.8, label=get_label(scen), color=c, linestyle=ls)
 
             if i == 0:
-                ax.set_title(f"resolution {res}", fontsize=9)
+                ax.set_title(f"resolution {res:,}")
             if j == 0:
                 ax.set_ylabel(f"{get_label(tech)}\n{ylabel}")
             ax.grid(True, alpha=0.3)
 
     axes[1, 0].set_xlabel(ylabel)
-    axes[1, -1].legend(loc='best', frameon=False, fontsize=8)
-    fig.suptitle(f"{ylabel} ECDFs (Tier 2)", fontsize=11)
+    # Shared legend below the figure
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.02),
+        frameon=False,
+        ncol=min(len(compare), 5),
+    )
+    fig.suptitle(f"{ylabel} ECDFs (Tier 2)")
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -264,20 +289,22 @@ def plot_europe_vs_northsea_panel(
     """
     has_tier1 = tier1_csv is not None and tier1_csv.exists()
     ncols = 2 if has_tier1 else 1
-    fig, axes = plt.subplots(1, ncols, figsize=(4.4 * ncols, 3.2), dpi=300, sharey=True)
+    fig, axes = plt.subplots(1, ncols, figsize=(HALF_WIDTH, 3.2), dpi=300, sharey=True)
     if ncols == 1:
         axes = [axes]
 
     def _plot_on_ax(ax, df, panel_title):
         res = sorted(df["resolution"].unique())
-        for scen in compare:
+        _linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1)), (0, (5, 2))]
+        for s_idx, scen in enumerate(compare):
             dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
             c = get_color(scen)
-            ax.plot(res, dd[metric].values, marker="o", linewidth=1.4,
-                   label=get_label(scen), color=c)
+            ls = _linestyles[s_idx % len(_linestyles)]
+            ax.plot(res, dd[metric].values, marker="o", linewidth=1.4, markersize=5,
+                   label=get_label(scen), color=c, linestyle=ls)
         apply_spatial_resolution_axis(ax, annotate=False)
         add_resolution_markers(ax, res)
-        ax.set_title(panel_title, fontsize=8)
+        ax.set_title(panel_title)
         ax.grid(True, alpha=0.3)
 
     # Panel 1: Tier 2 (Europe)
@@ -291,9 +318,18 @@ def plot_europe_vs_northsea_panel(
         tier1 = tier1[tier1["scenario"].isin(compare)]
         _plot_on_ax(axes[1], tier1, "North Sea (Tier 1)")
 
-    axes[-1].legend(loc="best", frameon=False, fontsize=7)
+    # Shared legend below both panels
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.05),
+        frameon=False,
+        ncol=min(len(compare), 3),
+        fontsize=6,
+    )
     if title:
-        fig.suptitle(title, fontsize=9)
+        fig.suptitle(title)
     fig.tight_layout(rect=[0, 0, 1, 0.95] if title else [0, 0, 1, 1])
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -329,6 +365,18 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     manifest = build_manifest(Path(args.results_root), args.glob)
+
+    # Deduplicate: if both biasTrue (old) and biasidw (new) exist for the same
+    # (resolution, wake), prefer biasidw and drop biasTrue.
+    if "true" in manifest["bias"].values and "idw" in manifest["bias"].values:
+        dup_mask = manifest["bias"].eq("true") & manifest.apply(
+            lambda row: ((manifest["bias"] == "idw")
+                         & (manifest["resolution"] == row["resolution"])
+                         & (manifest["wake"] == row["wake"])).any(), axis=1)
+        n_dropped = dup_mask.sum()
+        if n_dropped:
+            print(f"[INFO] Dropping {n_dropped} old biasTrue rows superseded by biasidw")
+            manifest = manifest[~dup_mask].copy()
 
     # Keep only the resolutions we want for Tier 2 (confirmatory)
     res_sel = tuple(int(x) for x in args.resolutions)

@@ -23,6 +23,7 @@ THESIS_LABELS = {
     "new_more": "Tiered-density",
 
     # bias flags (Chapter 7)
+    "biasidw": "PyVWF (IDW)",
     "biasTrue": "PyVWF",
     "biasFalse": "Baseline",
     "biasUniform": "Uniform",
@@ -39,7 +40,7 @@ THESIS_LABELS = {
 
 WAKE_KEYS = ["base", "standard", "glaum", "new_more"]
 WAKE_ORDER = ["base", "standard", "glaum", "new_more"]  # Baseline, Uniform, Tiered-capacity, Tiered-density
-BIAS_KEYS = ["biasFalse", "biasUniform", "biasTrue"]
+BIAS_KEYS = ["biasFalse", "biasUniform", "biasidw"]
 SCENARIO_KEYS = ["base", "standard", "biasUniform", "bias", "wake", "bias+wake"]
 
 # ---------- Aliases (backwards compatibility) ----------
@@ -49,6 +50,7 @@ ALIASES = {
     "tiered-density": "new_more",
     "tiered-capacity": "glaum",
     "uniform": "standard",
+    "biasTrue": "biasidw",
 }
 
 def canon(key: str) -> str:

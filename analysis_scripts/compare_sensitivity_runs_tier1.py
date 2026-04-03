@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard
+from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard, savefig_thesis
 from thesis_colors import THESIS_COLORS, get_color_cycle, THESIS_LABELS
 
 from network_utils import (
@@ -43,6 +43,8 @@ from network_utils import (
 # Apply thesis-wide plotting style
 _style = thesis_plot_style()
 cm, lw, ms, dpi = _style['cm'], _style['lw'], _style['ms'], _style['dpi']
+FULL_WIDTH = _style['FULL_WIDTH']
+HALF_WIDTH = _style['HALF_WIDTH']
 
 INVERT_RESOLUTION_AXIS = False  # apply_spatial_resolution_axis handles inversion for coarse->fine
 
@@ -102,7 +104,7 @@ def plot_lines_vs_resolution(
     title: str,
     compare: list[str],
 ) -> None:
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.2), dpi=300)
 
     res = sorted(df["resolution"].unique())
     if INVERT_RESOLUTION_AXIS:
@@ -110,13 +112,13 @@ def plot_lines_vs_resolution(
 
     for scen in compare:
         dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
-        ax.plot(res, dd[ycol].values, marker="o", linewidth=1.2, color=THESIS_COLORS.get(scen, None), label=THESIS_LABELS.get(scen, scen))
+        ax.plot(res, dd[ycol].values, marker="o", linewidth=1.2, markersize=5, color=THESIS_COLORS.get(scen, None), label=THESIS_LABELS.get(scen, scen))
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, res)
     ax.set_ylabel(ylabel)
-    ax.set_title(title, fontsize=9)
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='best', frameon=False, fontsize=7)
+    ax.legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -125,7 +127,7 @@ def plot_lines_vs_resolution(
 
 def plot_capacity_two_panel(df: pd.DataFrame, outpath: Path, compare: list[str]) -> None:
     """Two-panel: onwind vs offwind capacity vs resolution."""
-    fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.1), dpi=300, sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(FULL_WIDTH, 3.1), dpi=300, sharex=True)
 
     res = sorted(df["resolution"].unique())
     if INVERT_RESOLUTION_AXIS:
@@ -136,13 +138,13 @@ def plot_capacity_two_panel(df: pd.DataFrame, outpath: Path, compare: list[str])
         for scen in compare:
             dd = df[df["scenario"] == scen].set_index("resolution").reindex(res)
             ax.plot(res, dd[f"{tech}_cap_gw"].values, marker="o", linewidth=1.2, color=THESIS_COLORS.get(scen, None), label=THESIS_LABELS.get(scen, scen))
-        ax.set_title(THESIS_LABELS.get(tech, tech), fontsize=9)
+        ax.set_title(THESIS_LABELS.get(tech, tech))
         ax.grid(True, alpha=0.3)
         apply_spatial_resolution_axis(ax, annotate=False)
         add_resolution_markers(ax, res)
         ax.set_ylabel("Capacity (GW)")
 
-    axes[1].legend(loc='best', frameon=False, fontsize=7)
+    axes[1].legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -161,7 +163,7 @@ def plot_cf_2x2(
     if "tech" not in cf_long.columns:
         raise ValueError("cf_long has no 'tech' column. Build with build_cf_long_both(...).")
 
-    fig, axes = plt.subplots(2, 2, figsize=(9.0, 5.0), dpi=300, sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(FULL_WIDTH, 5.0), dpi=300, sharey=True)
     
     # Map resolutions to labels
     res_labels = {resolutions[0]: "Coarse", resolutions[1]: "Fine"}
@@ -192,9 +194,14 @@ def plot_cf_2x2(
 
             parts = ax.violinplot(violins, showmeans=True, showextrema=False)
             # Apply scenario colors to violin bodies and lines
-            for pc, color in zip(parts['bodies'], colors):
+            hatches = ['', '//', '\\\\', 'xx', '..', '++']  # distinguish overlapping violins
+            for idx_v, (pc, color) in enumerate(zip(parts['bodies'], colors)):
                 pc.set_facecolor(color)
-                pc.set_alpha(0.7)
+                pc.set_edgecolor('black')
+                pc.set_linewidth(0.6)
+                pc.set_alpha(0.65)
+                if idx_v < len(hatches):
+                    pc.set_hatch(hatches[idx_v])
             
             # Color the mean lines to match violin colors
             if 'cmeans' in parts:
@@ -213,14 +220,14 @@ def plot_cf_2x2(
                 parts['cmins'].set_edgecolor(colors)
             
             ax.set_xticks(range(1, len(labels) + 1))
-            ax.set_xticklabels(labels, fontsize=7, rotation=15, ha='right')
+            ax.set_xticklabels(labels, rotation=15, ha='right')
             if i == 0:
-                ax.set_title(res_labels.get(res, f"resolution {res}"), fontsize=9, pad=4)
+                ax.set_title(res_labels.get(res, f"resolution {res:,}"), pad=4)
             if j == 0:
-                ax.set_ylabel(f"{THESIS_LABELS.get(tech, tech)}\n{ylabel}", fontsize=9)
+                ax.set_ylabel(f"{THESIS_LABELS.get(tech, tech)}\n{ylabel}")
             ax.grid(True, alpha=0.3)
 
-    fig.suptitle(f"Wind {ylabel} distributions (Tier 1)", fontsize=11, y=0.99)
+    fig.suptitle(f"Wind {ylabel} distributions (Tier 1)", y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -234,7 +241,7 @@ def plot_marginal_value_proxy(
     compare: list[str] | None = None,
 ) -> None:
     """Proxy: (Δ objective)/(Δ installed capacity), relative to baseline, vs resolution."""
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.2), dpi=300)
 
     res = sorted(df["resolution"].unique())
     if INVERT_RESOLUTION_AXIS:
@@ -248,14 +255,14 @@ def plot_marginal_value_proxy(
         d_obj = (dd["objective"] - base["objective"]).reindex(res)
         d_cap = (dd[cap_col] - base[cap_col]).reindex(res)
         mv = (d_obj / d_cap).replace([np.inf, -np.inf], np.nan)
-        ax.plot(res, mv.values, marker="o", linewidth=1.2, color=THESIS_COLORS.get(scen, None), label=THESIS_LABELS.get(scen, scen))
+        ax.plot(res, mv.values, marker="o", linewidth=1.2, markersize=5, color=THESIS_COLORS.get(scen, None), label=THESIS_LABELS.get(scen, scen))
 
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, res)
     ax.set_ylabel(f"Δ objective / Δ {cap_col} (proxy units per GW)")
-    ax.set_title("Marginal value proxy (relative to baseline)", fontsize=9)
+    ax.set_title("Marginal value proxy (relative to baseline)")
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='best', frameon=False, fontsize=7)
+    ax.legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -274,7 +281,7 @@ def plot_tornado_factor_importance(
     For each factor (bias, wake, resolution) the bar shows the range of the
     metric when that factor varies while all others are held at baseline.
     """
-    fig, ax = plt.subplots(figsize=(5.8, 3.4), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.4), dpi=300)
 
     # Baseline value: base scenario at the coarsest resolution
     coarse_res = df["resolution"].max()
@@ -356,7 +363,7 @@ def plot_tornado_factor_importance(
     ax.set_yticks(y_pos)
     ax.set_yticklabels(labels)
     ax.set_xlabel(f"Max |delta {metric_label}| relative to baseline (%)")
-    ax.set_title(f"Factor importance: {metric_label}", fontsize=9)
+    ax.set_title(f"Factor importance: {metric_label}")
     ax.grid(True, axis="x", alpha=0.3)
 
     # Add value labels on bars
@@ -407,7 +414,7 @@ def plot_interaction_heatmap(
         print(f"[WARN] Heatmap: all NaN for {metric} at resolution {resolution}")
         return
 
-    fig, ax = plt.subplots(figsize=(4.2, 3.5), dpi=300)
+    fig, ax = plt.subplots(figsize=(HALF_WIDTH, 3.5), dpi=300)
 
     # Normalize to baseline for percentage display
     baseline = matrix[0, 0]
@@ -418,23 +425,26 @@ def plot_interaction_heatmap(
 
     im = ax.imshow(pct_matrix, cmap="RdYlGn_r", aspect="auto")
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label(f"Delta {metric_label} vs baseline (%)", fontsize=7)
+    cbar.set_label(f"Delta {metric_label} vs baseline (%)")
 
     ax.set_xticks([0, 1])
     ax.set_xticklabels(["Wake off", "Wake on"])
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["Bias off", "Bias on"])
 
-    # Annotate cells
+    # Annotate cells — show N/A for missing data
     for i in range(2):
         for j in range(2):
             val = pct_matrix[i, j]
-            if not np.isnan(val):
+            if np.isnan(val):
+                ax.text(j, i, "N/A", ha="center", va="center",
+                       fontsize=9, fontweight="bold", color="gray")
+            else:
                 text_color = "white" if abs(val) > np.nanmax(np.abs(pct_matrix)) * 0.6 else "black"
                 ax.text(j, i, f"{val:+.2f}%", ha="center", va="center",
-                       fontsize=8, fontweight="bold", color=text_color)
+                       fontsize=9, fontweight="bold", color=text_color)
 
-    ax.set_title(f"Interaction: bias x wake\n(resolution={resolution:,} km²)", fontsize=9)
+    ax.set_title(f"Interaction: bias x wake\n(resolution={resolution:,} km²)")
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -443,26 +453,30 @@ def plot_interaction_heatmap(
 
 def plot_interaction_wake_effect(df: pd.DataFrame, ycol: str, ylabel: str, outpath: Path, title: str) -> None:
     """Δ(wake) = metric(wake) - metric(off), split by bias on/off."""
-    fig, ax = plt.subplots(figsize=(5.2, 3.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(FULL_WIDTH, 3.2), dpi=300)
 
     res = sorted(df["resolution"].unique())
     if INVERT_RESOLUTION_AXIS:
         res = list(reversed(res))
 
-    for bias in ["false", "true"]:
+    # Detect which bias-on value is present (could be "true", "idw", or "kriging")
+    bias_on_vals = [b for b in df["bias"].unique() if b not in ("false", "uniform")]
+    bias_on = bias_on_vals[0] if bias_on_vals else "true"
+
+    for bias in ["false", bias_on]:
         d_off = df[(df["bias"] == bias) & (df["wake"] == "off")].set_index("resolution")
         d_wk = df[(df["bias"] == bias) & (df["wake"] != "off")].set_index("resolution")
         dd = (d_wk[ycol] - d_off[ycol]).reindex(res)
-        label_key = "bias" if bias == "true" else "base"
-        label_text = "With Bias" if bias == "true" else "Without Bias"
+        label_key = "bias" if bias != "false" else "base"
+        label_text = "With Bias" if bias != "false" else "Without Bias"
         ax.plot(res, dd.values, marker="o", linewidth=1.2, color=THESIS_COLORS.get(label_key, None), label=label_text)
     
     apply_spatial_resolution_axis(ax, annotate=False)
     add_resolution_markers(ax, res)
     ax.set_ylabel(ylabel)
-    ax.set_title(title, fontsize=9)
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='best', frameon=False, fontsize=7)
+    ax.legend(loc='best', frameon=False)
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outpath, bbox_inches="tight")
@@ -540,12 +554,26 @@ def main() -> None:
     outdir.mkdir(parents=True, exist_ok=True)
 
     manifest = build_manifest(results_root, args.glob)
+
+    # Deduplicate: if both biasTrue (old) and biasidw (new) exist for the same
+    # (resolution, wake), prefer biasidw and drop biasTrue.
+    if "true" in manifest["bias"].values and "idw" in manifest["bias"].values:
+        dup_mask = manifest["bias"].eq("true") & manifest.apply(
+            lambda row: ((manifest["bias"] == "idw")
+                         & (manifest["resolution"] == row["resolution"])
+                         & (manifest["wake"] == row["wake"])).any(), axis=1)
+        n_dropped = dup_mask.sum()
+        if n_dropped:
+            print(f"[INFO] Dropping {n_dropped} old biasTrue rows superseded by biasidw")
+            manifest = manifest[~dup_mask].copy()
+
     # Your Tier-1 set
     manifest = manifest[manifest["wake"].isin(["off", "density"])].copy()
 
     # Validate completeness (nice warning, not fatal)
     expected_res = sorted(manifest["resolution"].unique())
-    expected = {(res, bias, wake) for res in expected_res for bias in ["false", "true"] for wake in ["off", "density"]}
+    bias_vals = sorted(manifest["bias"].unique())
+    expected = {(res, bias, wake) for res in expected_res for bias in bias_vals for wake in ["off", "density"]}
     found = {(int(r.resolution), str(r.bias), str(r.wake)) for r in manifest.itertuples()}
     missing = sorted(expected - found)
     if missing:

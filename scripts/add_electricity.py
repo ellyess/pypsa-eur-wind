@@ -1287,7 +1287,7 @@ if __name__ == "__main__":
     # --- Wake effect modeling ---
     wake_config = snakemake.config.get("electricity", {}).get("wake_model", {})
     wake_method = wake_config.get("method", "flat")
-    offshore_mode = snakemake.config.get("offshore_mods", {}).get("mode")
+    offshore_mode = snakemake.config.get("spatial_mods", {}).get("mode")
 
     if offshore_mode == "dominant":
         logger.info("Dropping non-dominant offshore wind generators.")
@@ -1329,7 +1329,7 @@ if __name__ == "__main__":
     update_p_nom_max(n)
 
     # --- Apply wake effects after capacity estimation ---
-    if wake_method == "flat":
+    if wake_method in ("flat", "base", "standard"):
         coeffs = get_wake_coefficients(snakemake.config, "flat")
         derate = coeffs.get("derate_factor", 0.8855)
         logger.info(f"Applying flat wake derate factor: {derate}")
@@ -1337,18 +1337,22 @@ if __name__ == "__main__":
         offwind_gens = n.generators.index[offwind_mask]
         if len(offwind_gens) > 0:
             n.generators_t.p_max_pu[offwind_gens] *= derate
-    elif wake_method in ("tiered_density", "capacity_tiered", "new_more", "glaum"):
+    elif wake_method in ("tiered_density", "new_more"):
+        regions_offshore_path = snakemake.input.get(
+            "regions_offshore",
+            snakemake.input.get("regions_offshore_base", None),
+        )
         regions_gdf = None
-        if wake_method in ("tiered_density", "new_more"):
-            regions_offshore_path = snakemake.input.get(
-                "regions_offshore",
-                snakemake.input.get("regions_offshore_base", None),
-            )
-            if regions_offshore_path is not None:
-                regions_gdf = gpd.read_file(regions_offshore_path)
+        if regions_offshore_path is not None:
+            regions_gdf = gpd.read_file(regions_offshore_path)
         logger.info(f"Applying wake model: {wake_method}")
         add_wake_generators(
             n, snakemake.config, method=wake_method, regions_gdf=regions_gdf
+        )
+    elif wake_method in ("capacity_tiered", "glaum"):
+        logger.info(f"Applying wake model: {wake_method}")
+        add_wake_generators(
+            n, snakemake.config, method=wake_method, regions_gdf=None
         )
     elif wake_method in ("none", None, ""):
         logger.info("No wake effects applied.")

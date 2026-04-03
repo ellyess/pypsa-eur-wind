@@ -1,6 +1,8 @@
 base-s100000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: 100000
     renewable:
@@ -19,8 +21,10 @@ base-s100000-biasFalse:
 
 
 base-s50000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 50000
         onshore_threshold: 50000
     renewable:
@@ -39,8 +43,10 @@ base-s50000-biasFalse:
 
 
 base-s10000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 10000
         onshore_threshold: 10000
     renewable:
@@ -59,8 +65,10 @@ base-s10000-biasFalse:
 
 
 base-s5000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 5000
         onshore_threshold: 5000
     renewable:
@@ -79,8 +87,10 @@ base-s5000-biasFalse:
 
 
 base-s1000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 1000
         onshore_threshold: 1000
     renewable:

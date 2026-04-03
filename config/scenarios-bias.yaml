@@ -1,26 +1,30 @@
-base-s100000-biasTrue:
-    offshore_mods:
-        wake_model: base
+base-s100000-biasidw:
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: 100000
     renewable:
         onwind:
             resource:
-                bias_corr: True
+                bias_corr: idw
         offwind-ac:
             resource:
-                bias_corr: True
+                bias_corr: idw
         offwind-dc:
             resource:
-                bias_corr: True
+                bias_corr: idw
         offwind-float:
             resource:
-                bias_corr: True
+                bias_corr: idw
 
 
 base-s100000-biasFalse:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: 100000
     renewable:
@@ -38,8 +42,10 @@ base-s100000-biasFalse:
                 bias_corr: False
 
 base-s100000-biasUniform:
-    offshore_mods:
-        wake_model: base
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
         offshore_threshold: 100000
         onshore_threshold: 100000
     renewable:

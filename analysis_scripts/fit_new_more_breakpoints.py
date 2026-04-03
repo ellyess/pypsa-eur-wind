@@ -31,18 +31,12 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
-
-# Optional thesis styling
-try:
-    import plotting_style as ps
-except Exception:  # pragma: no cover
-    ps = None
+from plotting_style import thesis_plot_style, format_axes_standard
 
 
 @dataclass(frozen=True)
@@ -207,8 +201,9 @@ def _write_outputs(outdir: Path, result: FitResult) -> None:
 
 
 def _plot_fit(outdir: Path, result: FitResult, xmax: float) -> None:
-    if ps is not None and hasattr(ps, "thesis_plot_style"):
-        ps.thesis_plot_style()
+    _style = thesis_plot_style()
+    dpi = _style['dpi']
+    FULL_WIDTH = _style['FULL_WIDTH']
 
     xs = np.linspace(0.0, xmax, 1000)
     y = y_loss_percent(xs)
@@ -221,89 +216,26 @@ def _plot_fit(outdir: Path, result: FitResult, xmax: float) -> None:
     yx_hat = np.interp(xs, bp, yx_bp)
     y_hat = np.where(xs > 0, yx_hat / xs, y_loss_percent(xs))
 
-    fig, axes = plt.subplots(2, 1, figsize=(5.0, 5.5), dpi=300, sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(0.75 * FULL_WIDTH, 5.5), dpi=dpi, sharex=True)
 
-    axes[0].plot(xs, y, label="true", linewidth=1.6)
-    axes[0].plot(xs, y_hat, label="fit", linewidth=1.6)
-    axes[0].scatter(bp, y_bp, s=12, zorder=3, label="fit breaks")
+    axes[0].plot(xs, y, label="Analytic curve", color="#4D4D4D")
+    axes[0].plot(xs, y_hat, label="Piecewise fit", color="#009E73")
+    axes[0].scatter(bp, y_bp, s=14, zorder=3, color="#009E73", label="Breakpoints")
     axes[0].set_ylabel("Loss (percent)")
     axes[0].grid(True, alpha=0.3)
-    axes[0].legend(frameon=False, fontsize=8)
+    axes[0].legend(frameon=False)
 
-    axes[1].plot(xs, yx, label="true", linewidth=1.6)
-    axes[1].plot(xs, yx_hat, label="fit", linewidth=1.6)
-    axes[1].scatter(bp, yx_bp, s=12, zorder=3, label="fit breaks")
+    axes[1].plot(xs, yx, label="Analytic curve", color="#4D4D4D")
+    axes[1].plot(xs, yx_hat, label="Piecewise fit", color="#009E73")
+    axes[1].scatter(bp, yx_bp, s=14, zorder=3, color="#009E73", label="Breakpoints")
     axes[1].set_xlabel(r"Density (MW/km$^2$)")
     axes[1].set_ylabel("Loss * density")
     axes[1].grid(True, alpha=0.3)
-    axes[1].legend(frameon=False, fontsize=8)
+    axes[1].legend(frameon=False)
 
     fig.tight_layout()
-    fig.savefig(outdir / "new_more_breakpoints_fit.png")
-    plt.close(fig)
-
-
-def _parse_breaks(breaks: Optional[str]) -> Optional[List[float]]:
-    if not breaks:
-        return None
-    vals = [float(x.strip()) for x in breaks.split(",") if x.strip()]
-    if len(vals) < 2:
-        return None
-    return vals
-
-
-def _plot_fit_with_existing(
-    outdir: Path,
-    result: FitResult,
-    xmax: float,
-    existing_breaks: Optional[List[float]],
-) -> None:
-    if existing_breaks is None:
-        _plot_fit(outdir, result, xmax=xmax)
-        return
-
-    if ps is not None and hasattr(ps, "thesis_plot_style"):
-        ps.thesis_plot_style()
-
-    xs = np.linspace(0.0, xmax, 1000)
-    y = y_loss_percent(xs)
-    yx = y * xs
-
-    bp_fit = np.array(result.breakpoints)
-    y_bp_fit = y_loss_percent(bp_fit)
-    yx_bp_fit = y_bp_fit * bp_fit
-    yx_hat_fit = np.interp(xs, bp_fit, yx_bp_fit)
-    y_hat_fit = np.where(xs > 0, yx_hat_fit / xs, y_loss_percent(xs))
-
-    bp_cur = np.array(existing_breaks, dtype=float)
-    y_bp_cur = y_loss_percent(bp_cur)
-    yx_bp_cur = y_bp_cur * bp_cur
-    yx_hat_cur = np.interp(xs, bp_cur, yx_bp_cur)
-    y_hat_cur = np.where(xs > 0, yx_hat_cur / xs, y_loss_percent(xs))
-
-    fig, axes = plt.subplots(2, 1, figsize=(5.0, 5.5), dpi=300, sharex=True)
-
-    axes[0].plot(xs, y, label="true", linewidth=1.6)
-    axes[0].plot(xs, y_hat_fit, label="fit", linewidth=1.6)
-    axes[0].plot(xs, y_hat_cur, label="current", linewidth=1.6, linestyle="--")
-    axes[0].scatter(bp_fit, y_bp_fit, s=12, zorder=3, label="fit breaks")
-    axes[0].scatter(bp_cur, y_bp_cur, s=12, zorder=3, label="current breaks")
-    axes[0].set_ylabel("Loss (percent)")
-    axes[0].grid(True, alpha=0.3)
-    axes[0].legend(frameon=False, fontsize=8)
-
-    axes[1].plot(xs, yx, label="true", linewidth=1.6)
-    axes[1].plot(xs, yx_hat_fit, label="fit", linewidth=1.6)
-    axes[1].plot(xs, yx_hat_cur, label="current", linewidth=1.6, linestyle="--")
-    axes[1].scatter(bp_fit, yx_bp_fit, s=12, zorder=3, label="fit breaks")
-    axes[1].scatter(bp_cur, yx_bp_cur, s=12, zorder=3, label="current breaks")
-    axes[1].set_xlabel(r"Density (MW/km$^2$)")
-    axes[1].set_ylabel("Loss * density")
-    axes[1].grid(True, alpha=0.3)
-    axes[1].legend(frameon=False, fontsize=8)
-
-    fig.tight_layout()
-    fig.savefig(outdir / "new_more_breakpoints_fit.png")
+    format_axes_standard(fig)
+    fig.savefig(outdir / "new_more_breakpoints_fit.png", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -314,11 +246,6 @@ def main() -> None:
     ap.add_argument("--grid-size", type=int, default=300, help="Candidate grid size")
     ap.add_argument("--grid", choices=["linear", "log"], default="log")
     ap.add_argument("--weight", choices=["none", "x"], default="none")
-    ap.add_argument(
-        "--existing-breaks",
-        default="0,0.025,0.05,0.25,1,2.5,4",
-        help="Comma-separated breakpoints to plot as the current spec",
-    )
     ap.add_argument("--outdir", default="wake_extra/new_more_fit", help="Output directory")
     args = ap.parse_args()
 
@@ -332,8 +259,7 @@ def main() -> None:
 
     outdir = Path(args.outdir)
     _write_outputs(outdir, result)
-    existing_breaks = _parse_breaks(args.existing_breaks)
-    _plot_fit_with_existing(outdir, result, xmax=float(args.xmax), existing_breaks=existing_breaks)
+    _plot_fit(outdir, result, xmax=float(args.xmax))
 
     print("[OK] Breakpoints:", result.breakpoints)
     print("[OK] Factors:", result.factors)

@@ -77,7 +77,73 @@ def thesis_plot_style(
     )
 
     cm = 1.0 / 2.54
-    return {"cm": cm, "lw": line_width, "ms": marker_size, "dpi": dpi}
+
+    # Thesis page dimensions (A4, KOMA-Script, BCOR=25mm, DIV=12)
+    # textwidth = 418.26 pt = 14.7 cm = 5.787 in
+    FULL_WIDTH = 14.7 * cm   # \textwidth  – use for single-column figures
+    HALF_WIDTH = 7.2 * cm    # ≈ 0.49\textwidth – use for side-by-side subfigures
+    THIRD_WIDTH = 4.6 * cm   # ≈ 0.31\textwidth – use for 3-across subfigure grids
+    MAP_WIDTH = 12.5 * cm    # ≈ 0.85\textwidth – use for maps with margins
+
+    return {
+        "cm": cm,
+        "lw": line_width,
+        "ms": marker_size,
+        "dpi": dpi,
+        "FULL_WIDTH": FULL_WIDTH,
+        "HALF_WIDTH": HALF_WIDTH,
+        "THIRD_WIDTH": THIRD_WIDTH,
+        "MAP_WIDTH": MAP_WIDTH,
+    }
+
+
+def savefig_thesis(
+    fig, path, *, close: bool = True, pdf_size_limit_mb: float = 5.0, **kwargs
+):
+    """Save a figure in PDF format with thesis defaults, then close it.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+    path : str or Path
+        Output path.  Extension is forced to '.pdf' unless the figure
+        contains rasterised artists, in which case '.png' is kept.
+    close : bool
+        Whether to close the figure after saving (default True).
+    pdf_size_limit_mb : float
+        If the saved PDF exceeds this size (in MB), re-save as 600 dpi PNG
+        and delete the oversized PDF.  Set to 0 to disable.
+    **kwargs
+        Forwarded to ``fig.savefig``.
+    """
+    import os
+    from pathlib import Path as _P
+    path = _P(path)
+    # Detect rasterised content (e.g. scatter with rasterized=True)
+    has_raster = any(
+        getattr(artist, "get_rasterized", lambda: False)()
+        for ax in fig.get_axes()
+        for artist in ax.get_children()
+    )
+    if not has_raster:
+        path = path.with_suffix(".pdf")
+    kwargs.setdefault("bbox_inches", "tight")
+    kwargs.setdefault("pad_inches", 0.02)
+    fig.savefig(path, **kwargs)
+    # PDF size guard: fall back to high-res PNG if PDF is too large
+    if (
+        pdf_size_limit_mb > 0
+        and path.suffix == ".pdf"
+        and path.exists()
+        and os.path.getsize(path) > pdf_size_limit_mb * 1_000_000
+    ):
+        size_mb = os.path.getsize(path) / 1_000_000
+        png_path = path.with_suffix(".png")
+        fig.savefig(png_path, dpi=600, **kwargs)
+        path.unlink()
+        print(f"  ⚠  {path.name} was {size_mb:.1f} MB → saved as {png_path.name}")
+    if close:
+        plt.close(fig)
 
 
 def apply_spatial_resolution_axis(

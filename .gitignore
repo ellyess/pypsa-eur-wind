@@ -90,3 +90,7 @@ CLAUDE.local.md
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+entsoe-api-key.txt
+/docs
+/plots
+*.tex

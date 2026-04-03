@@ -1,0 +1,62 @@
+base-s100000-biasFalse:
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: False
+        offwind-ac:
+            resource:
+                bias_corr: False
+        offwind-dc:
+            resource:
+                bias_corr: False
+        offwind-float:
+            resource:
+                bias_corr: False
+
+base-s100000-biasidw:
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: idw
+        offwind-ac:
+            resource:
+                bias_corr: idw
+        offwind-dc:
+            resource:
+                bias_corr: idw
+        offwind-float:
+            resource:
+                bias_corr: idw
+
+base-s100000-biaskriging:
+    electricity:
+        wake_model:
+            method: base
+    spatial_mods:
+        offshore_threshold: 100000
+        onshore_threshold: 100000
+    renewable:
+        onwind:
+            resource:
+                bias_corr: kriging
+        offwind-ac:
+            resource:
+                bias_corr: kriging
+        offwind-dc:
+            resource:
+                bias_corr: kriging
+        offwind-float:
+            resource:
+                bias_corr: kriging

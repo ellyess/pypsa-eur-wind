@@ -89,7 +89,7 @@ from scripts._helpers import configure_logging, set_scenario_config
 
 # Variable spatial resolution: wake helpers and region splitting
 from wake_helpers import (
-    get_offshore_mods,
+    get_spatial_mods,
     get_threshold,
     get_wake_dir,
     regions_file,
@@ -710,7 +710,7 @@ if __name__ == "__main__":
         getattr(clustering, attr).to_csv(snakemake.output[attr])
 
     # --- Variable spatial resolution: region output with optional splitting ---
-    mods = get_offshore_mods(snakemake.config)
+    mods = get_spatial_mods(snakemake.config)
     wdir = get_wake_dir(mods)
 
     for which in ["regions_onshore", "regions_offshore"]:

@@ -109,7 +109,7 @@ from scripts.build_shapes import _simplify_polys
 
 # Variable spatial resolution: cache and region loading
 from wake_helpers import (
-    get_offshore_mods,
+    get_spatial_mods,
     get_threshold,
     get_wake_dir,
     profile_cache_path,
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         logger.info(f"correction_factor is set as {correction_factor}")
 
     # Variable spatial resolution: cache lookup
-    mods = get_offshore_mods(snakemake.config)
+    mods = get_spatial_mods(snakemake.config)
     clusters = snakemake.wildcards.clusters
     threshold = (
         get_threshold(mods, technology)
