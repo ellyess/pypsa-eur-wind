@@ -32,7 +32,8 @@ from scripts.wake_effects import (
 def _make_mock_network(
     n_generators=3, p_nom_max=None, timesteps=4, resource_class=False
 ):
-    """Create a minimal mock PyPSA network for testing wake effects.
+    """
+    Create a minimal mock PyPSA network for testing wake effects.
 
     With ``resource_class`` the generators are named the way PyPSA-Eur names
     them once resource classes are enabled: "{region} {class} {carrier}".
@@ -330,7 +331,7 @@ class TestResolveRegionKeys:
         assert list(_resolve_region_keys(keys, known)) == known
 
     def test_bus_ending_in_a_number_is_not_truncated(self):
-        """ "GB0 0 offwind-ac" is ambiguous; the region set disambiguates it."""
+        """A bus ending in a number is ambiguous; the region set settles it."""
         assert list(_resolve_region_keys(pd.Series(["GB0 0"]), ["GB0 0"])) == ["GB0 0"]
         assert list(_resolve_region_keys(pd.Series(["GB0 0"]), ["GB0"])) == ["GB0"]
 
