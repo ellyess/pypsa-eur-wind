@@ -65,13 +65,31 @@ def figure_size(width: str = "FULL_WIDTH", height_cm: float = 6.0) -> tuple:
 def savefig(fig, path, *, format_axes: bool = True, **kwargs) -> Path:
     """Save *fig* to *path* with the thesis defaults, creating parent dirs.
 
-    Applies the standard tick formatting first unless ``format_axes=False``,
-    then delegates to :func:`plotting_style.savefig_thesis`, which forces PDF
-    and falls back to a 600 dpi PNG when the PDF would be oversized.
+    The requested extension is honoured: manuscripts reference figures by
+    name, so silently turning a ``.png`` into a ``.pdf`` would drop it from
+    the document. A ``.pdf`` target goes through
+    :func:`plotting_style.savefig_thesis`, which falls back to a 600 dpi PNG
+    when the PDF would be oversized; any other extension is written directly.
+
+    Returns the path actually written, which may differ from *path* when the
+    PDF size guard trips.
     """
+    import matplotlib.pyplot as plt
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if format_axes:
         format_axes_standard(fig)
-    savefig_thesis(fig, path, **kwargs)
+
+    if path.suffix.lower() in ("", ".pdf"):
+        savefig_thesis(fig, path, **kwargs)
+        written = path.with_suffix(".pdf")
+        # savefig_thesis swaps to PNG if the PDF blew the size limit.
+        return written if written.exists() else written.with_suffix(".png")
+
+    kwargs.setdefault("bbox_inches", "tight")
+    kwargs.setdefault("pad_inches", 0.02)
+    kwargs.setdefault("dpi", 600)
+    fig.savefig(path, **kwargs)
+    plt.close(fig)
     return path

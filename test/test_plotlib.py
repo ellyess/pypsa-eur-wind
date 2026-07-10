@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analysis_scripts"))
 
-from plotlib import order_for, palette_for, use_style  # noqa: E402
+from plotlib import order_for, palette_for, savefig, use_style  # noqa: E402
 from plotlib.distributions import plot_distribution  # noqa: E402
 from plotlib.resolution import plot_vs_density, plot_vs_resolution  # noqa: E402
 from plotlib.style import legend_above  # noqa: E402
@@ -185,3 +185,29 @@ class TestLegendAbove:
         _, ax = plt.subplots()
         legend_above(ax)
         assert ax.get_legend() is None
+
+
+class TestSavefig:
+    """Manuscripts reference figures by name, so the extension must survive."""
+
+    def _figure(self):
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        ax.plot([1, 2], [1, 2])
+        return fig
+
+    def test_png_stays_png(self, styled, tmp_path):
+        written = savefig(self._figure(), tmp_path / "fig.png")
+        assert written.suffix == ".png"
+        assert written.is_file()
+        assert not (tmp_path / "fig.pdf").exists()
+
+    def test_pdf_stays_pdf(self, styled, tmp_path):
+        written = savefig(self._figure(), tmp_path / "fig.pdf")
+        assert written.suffix == ".pdf"
+        assert written.is_file()
+
+    def test_creates_parent_directories(self, styled, tmp_path):
+        written = savefig(self._figure(), tmp_path / "a" / "b" / "fig.png")
+        assert written.is_file()
