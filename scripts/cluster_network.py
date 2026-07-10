@@ -795,6 +795,23 @@ if __name__ == "__main__":
                 sea.union_all()
             )
 
+            # Regions lying entirely outside the modelled sea clip to an empty
+            # geometry, whose bounds are NaN. atlite then fails deep inside
+            # availabilitymatrix with "cannot convert float NaN to integer".
+            # Such a region has no offshore potential, so drop it.
+            empty = clustered.geometry.is_empty | clustered.geometry.isna()
+            if empty.any():
+                dropped = (
+                    clustered.loc[empty, "name"].tolist()
+                    if "name" in clustered.columns
+                    else clustered.index[empty].tolist()
+                )
+                logger.info(
+                    f"Dropping {int(empty.sum())} offshore region(s) with no "
+                    f"overlap with {sea_shape_path}: {dropped}"
+                )
+                clustered = clustered.loc[~empty]
+
         # Write standard output
         clustered.to_file(snakemake.output[which], driver="GeoJSON")
 
