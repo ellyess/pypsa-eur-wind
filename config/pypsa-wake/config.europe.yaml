@@ -149,9 +149,9 @@ solving:
     min_iterations: 4
     max_iterations: 6
     transmission_losses: 0
-  solver_options:
-    gurobi-default:
-      threads: 8
-      BarConvTol: 1.e-6
+  # See config.northsea.yaml: HiGHS, so the runs need no Gurobi licence.
+  solver:
+    name: highs
+    options: highs-default
   mem_mb: 100000
   runtime: 6h
