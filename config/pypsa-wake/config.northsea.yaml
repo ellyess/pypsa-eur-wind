@@ -155,13 +155,17 @@ solving:
     min_iterations: 4
     max_iterations: 6
     transmission_losses: 0
-  # HiGHS (open source, declared in envs/environment.yaml as `highspy`), so the
-  # runs do not depend on a Gurobi licence. `highs-default.threads` is 1, which
-  # lets snakemake solve several of the 12 small runs concurrently at
-  # `--cores 8`. To go back to Gurobi, set name/options to gurobi/gurobi-default
-  # and restore the `gurobi-default: {threads: 8, BarConvTol: 1.e-6}` override.
+  # Neither config used to set `solver`, so both silently inherited gurobi from
+  # config.default.yaml while overriding only `solver_options`. Pin it here.
+  # `threads: 8` gives the whole machine to one solve at `--cores 8`; drop it to
+  # 2 to run four of the twelve concurrently. To run without a Gurobi licence,
+  # switch to `name: highs, options: highs-default` (highspy is a declared dep).
   solver:
-    name: highs
-    options: highs-default
+    name: gurobi
+    options: gurobi-default
+  solver_options:
+    gurobi-default:
+      threads: 8
+      BarConvTol: 1.e-6
   mem_mb: 100000
   runtime: 6h

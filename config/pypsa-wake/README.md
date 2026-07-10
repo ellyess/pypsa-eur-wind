@@ -29,9 +29,22 @@ runs built offshore wind at different absolute scales).
 - **North Sea:** 4 wake models × {100 000, 10 000, 1 000} km² = **12 runs** (reproduces thesis Fig. 7.9–7.14). Uncomment `base-s50000` / `base-s5000` for a finer 5-point foundation sweep.
 - **Europe:** {NoWake, TierDensity} × {1 000 000, 100 000, 10 000} km² = **6 runs**. Uncomment `standard` / `glaum` blocks to add Uniform + TierCap at continental scale.
 
-## Decisions for you to confirm
-1. **CO₂ cap** — *off by default* (matches the thesis wake run, which inherited `config.default.yaml`'s `co2limit_enable: false`). The thesis *spatial* chapter used a 7.75 × 10⁷ t cap. Enabling a cap is more defensible for a 2030 study but will move absolute build-out away from the canonical Fig. 7.9–7.14. To enable, set `co2limit_enable: true` + `co2limit:` under `electricity:` in *both* configs. **→ keep off (thesis-consistent) or enable a 2030 cap?**
-2. **Europe scope** — *electricity-only by default*, for consistency with the North Sea runs. The thesis Europe run (ch. 9) was sector-coupled (electrolysers/H₂). Sector coupling needs the sector workflow, not the elec-only rules. **→ keep elec-only (recommended, consistent) or reproduce the sector-coupled Europe?**
+## Decisions
+
+1. **CO₂ cap — off.** *Settled 2026-07-10.* Matches the thesis wake run, which
+   inherited `config.default.yaml`'s `co2limit_enable: false`. (The thesis
+   *spatial* chapter used a 7.75 × 10⁷ t cap; a 2030 cap would be more
+   defensible in isolation but moves absolute build-out away from the canonical
+   Fig. 7.9–7.14.) To revisit, set `co2limit_enable: true` + `co2limit:` under
+   `electricity:` in *both* configs.
+2. **Europe scope — electricity-only.** *Settled 2026-07-10*, for consistency
+   with the North Sea runs; whether the manuscript needs sector-coupled runs
+   will be assessed after the results are in. Note that §3.7's "~2.9 %
+   continental cost" and `fig_europe_vs_northsea_offwind_cap.png` currently
+   come from the thesis's *sector-coupled* tier-2 sensitivity run, so the
+   electricity-only Europe run will give a different number for the same claim.
+
+### Still open
 3. **Europe wake models** — default NoWake + TierDensity only (transferability check). **→ add Uniform + TierCap at continental scale to show the collapse there too?**
 4. **Resolution grid** — default 3 North Sea resolutions (thesis-matching). **→ run the full 5-point sweep (adds 50 000 / 5 000) for smoother invariance curves?**
 
