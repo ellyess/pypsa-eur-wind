@@ -804,6 +804,7 @@ rule add_electricity:
             f"costs_{config_provider('costs', 'year')(w)}_processed.csv"
         ),
         regions=resources("regions_onshore_base_s_{clusters}.geojson"),
+        regions_offshore=resources("regions_offshore_base_s_{clusters}.geojson"),
         powerplants=resources("powerplants_s_{clusters}.csv"),
         hydro_capacities=ancient("data/hydro_capacities.csv"),
         unit_commitment="data/unit_commitment.csv",

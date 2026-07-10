@@ -36,6 +36,90 @@ class _OperationalReserveConfig(ConfigModel):
     )
 
 
+class _UniformWakeConfig(ConfigModel):
+    """Configuration for `electricity.wake_model.uniform` settings."""
+
+    derate_factor: float = Field(
+        0.8855,
+        description="Factor applied to the capacity factors of all offshore wind generators.",
+    )
+
+
+class _CapacityTieredWakeConfig(ConfigModel):
+    """Configuration for `electricity.wake_model.capacity_tiered` settings."""
+
+    global_derate: float = Field(
+        0.906,
+        description="Factor applied to the capacity factors of all offshore wind generators before the tiered losses.",
+    )
+    f2: float = Field(
+        0.1279732,
+        description="Marginal wake loss fraction of the second capacity tier.",
+    )
+    f3_extra: float = Field(
+        0.13902848,
+        description="Additional marginal wake loss fraction of the third capacity tier, compounded on top of `f2`.",
+    )
+    max_caps: list[float] = Field(
+        default_factory=lambda: [2000.0, 10000.0],
+        description="Upper capacity bounds (MW) of the first two tiers. The final tier is unbounded.",
+    )
+
+
+class _TieredDensityWakeConfig(ConfigModel):
+    """Configuration for `electricity.wake_model.tiered_density` settings."""
+
+    alpha: float = Field(
+        7.3,
+        description="Amplitude of the exponential term of the wake loss curve T(x) = alpha * exp(-x / beta) + gamma * x + delta.",
+    )
+    beta: float = Field(
+        0.05,
+        description="Decay density (MW/km²) of the exponential term of the wake loss curve.",
+    )
+    gamma: float = Field(
+        -0.7,
+        description="Linear coefficient of the wake loss curve.",
+    )
+    delta: float = Field(
+        -14.6,
+        description="Constant offset of the wake loss curve.",
+    )
+    breakpoints: list[float] = Field(
+        default_factory=lambda: [
+            0.0,
+            0.0370257,
+            0.826982,
+            1.51092,
+            2.29324,
+            3.17241,
+            4.0,
+        ],
+        description="Capacity density tier edges (MW/km²). Each interval becomes one generator segment.",
+    )
+
+
+class _WakeModelConfig(ConfigModel):
+    """Configuration for `electricity.wake_model` settings."""
+
+    method: Literal["none", "uniform", "capacity_tiered", "tiered_density"] = Field(
+        "none",
+        description="Offshore wind wake model. `none` keeps the flat `renewable: <carrier>: correction_factor` proxy. Any other value supersedes it and requires that factor to be set to 1.",
+    )
+    uniform: _UniformWakeConfig = Field(
+        default_factory=_UniformWakeConfig,
+        description="Coefficients of the uniform wake model.",
+    )
+    capacity_tiered: _CapacityTieredWakeConfig = Field(
+        default_factory=_CapacityTieredWakeConfig,
+        description="Coefficients of the capacity-tiered wake model, after `Glaum et al. <https://arxiv.org/abs/2404.09721>`_.",
+    )
+    tiered_density: _TieredDensityWakeConfig = Field(
+        default_factory=_TieredDensityWakeConfig,
+        description="Coefficients of the density-tiered wake model.",
+    )
+
+
 class _MaxHoursConfig(BaseModel):
     """Configuration for `electricity.max_hours` settings."""
 
@@ -198,6 +282,10 @@ class ElectricityConfig(BaseModel):
     operational_reserve: _OperationalReserveConfig = Field(
         default_factory=_OperationalReserveConfig,
         description="Settings for reserve requirements following `GenX <https://genxproject.github.io/GenX/dev/core/#Reserves>`_.",
+    )
+    wake_model: _WakeModelConfig = Field(
+        default_factory=_WakeModelConfig,
+        description="Offshore wind wake loss model. Disabled by default.",
     )
     max_hours: _MaxHoursConfig = Field(
         default_factory=_MaxHoursConfig,

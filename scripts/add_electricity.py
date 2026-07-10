@@ -69,6 +69,7 @@ from scripts._helpers import (
     set_scenario_config,
     update_p_nom_max,
 )
+from scripts.wake_effects import apply_wake_model
 
 if PYPSA_V1:
     pypsa.options.params.add.return_names = True
@@ -1313,6 +1314,10 @@ if __name__ == "__main__":
                 )
 
     update_p_nom_max(n)
+
+    # Wake losses must be applied after the installable offshore capacity is
+    # final, since the tiered models split generators along capacity bands.
+    apply_wake_model(n, snakemake.config, snakemake.input.regions_offshore)
 
     attach_storageunits(
         n, costs, n.buses.index, extendable_carriers["StorageUnit"], max_hours

@@ -124,6 +124,30 @@ electricity:
     epsilon_load: 0.02
     epsilon_vres: 0.02
     contingency: 4000
+  wake_model:
+    method: none
+    uniform:
+      derate_factor: 0.8855
+    capacity_tiered:
+      global_derate: 0.906
+      f2: 0.1279732
+      f3_extra: 0.13902848
+      max_caps:
+      - 2000.0
+      - 10000.0
+    tiered_density:
+      alpha: 7.3
+      beta: 0.05
+      gamma: -0.7
+      delta: -14.6
+      breakpoints:
+      - 0.0
+      - 0.0370257
+      - 0.826982
+      - 1.51092
+      - 2.29324
+      - 3.17241
+      - 4.0
   max_hours:
     battery: 6
     "li-ion": 6
