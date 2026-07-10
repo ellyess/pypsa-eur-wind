@@ -1,0 +1,153 @@
+# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
+# SPDX-License-Identifier: CC0-1.0
+#
+# ============================================================================
+# HARMONISED EUROPE CONFIG  --  Applied Energy wake paper (transferability)
+# ============================================================================
+# Continental transferability check for the manuscript. Uses the SAME per-unit
+# settings as config.northsea.yaml (dominant mode, 12 MW turbines,
+# capacity_per_sqkm 4, correction_factor 1, 2023 ERA5, 2030, 6 h) so that North
+# Sea and Europe differ ONLY in domain/scope (resolves C3). Scenarios live in
+# config/pypsa-wake/scenarios.yaml.
+#
+# >>> KEY DECISION 1 -- scope: ELECTRICITY-ONLY (consistent with the North Sea
+#     runs). The thesis Europe run (chapter 9) was sector-coupled; for a clean,
+#     consistent wake/resolution paper this config keeps Europe electricity-only.
+#     To match the thesis sector-coupled setup instead, this needs the sector
+#     workflow (sector_opts / foresight) rather than the elec-only rules.
+#     [DECISION FOR USER -- see config/pypsa-wake/README.md]
+#
+# >>> KEY DECISION 2 -- wake models: per the approved scope, Europe is a
+#     transferability check for TierDensity, so only base (NoWake) + new_more
+#     (TierDensity) are active. Uncomment standard/glaum below to also test the
+#     Uniform and TierCap collapse at continental scale.
+#
+# >>> KEY DECISION 3 -- CO2 cap: as in the North Sea config, NO cap by default
+#     (inherits config.default.yaml co2limit_enable: false). See that file's
+#     header to enable a 2030 cap consistently across both domains.
+# ============================================================================
+
+run:
+  prefix: "paper-europe-2030-30-dominant-6h"
+  name:
+    # --- No-wake baseline (NoWake)
+    - base-s1000000-biasFalse
+    - base-s100000-biasFalse
+    - base-s10000-biasFalse
+    # --- Density tiers (TierDensity, this work)
+    - new_more-s1000000-biasFalse
+    - new_more-s100000-biasFalse
+    - new_more-s10000-biasFalse
+    # optional -- add Uniform / TierCap at continental scale:
+    # - standard-s1000000-biasFalse
+    # - standard-s100000-biasFalse
+    # - standard-s10000-biasFalse
+    # - glaum-s1000000-biasFalse
+    # - glaum-s100000-biasFalse
+    # - glaum-s10000-biasFalse
+  scenarios:
+    enable: true
+    file: config/pypsa-wake/scenarios.yaml
+  shared_resources:
+    policy: base
+
+scenario:
+  clusters:
+    - 30
+  planning_horizons:
+    - 2030
+
+countries: ['AL', 'AT', 'BA', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'ES', 'FR', 'GB', 'GR', 'HR', 'IE', 'IT', 'LU', 'ME', 'MK', 'NL', 'NO', 'PT', 'RS', 'SE', 'SI']
+
+snapshots:
+  start: "2023-01-01"
+  end: "2024-01-01"
+
+# Fork-specific: variable OFFSHORE spatial resolution, dominant offshore mode.
+# sea_shape empty -> full European offshore domain (not clipped to the North Sea).
+spatial_mods:
+  mode: dominant
+  sea_shape:
+  shared_files: europe
+  offshore_threshold: 100000      # overridden per scenario
+  onshore_threshold: false        # onshore NOT split (offshore resolution only)
+
+electricity:
+  wake_model:
+    method: base                  # overridden per scenario
+  extendable_carriers:
+    Generator: [offwind-ac, offwind-dc, offwind-float, onwind, solar]
+    StorageUnit: [battery]
+    Store: []
+    Link: []
+  powerplants_filter: (DateOut >= 2023 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  estimate_renewable_capacities:
+    enable: false
+  transmission_limit: vopt
+
+atlite:
+  default_cutout: europe-2023-sarah3-era5
+  nprocesses: 2
+  cutouts:
+    europe-2023-sarah3-era5:
+      module: [sarah, era5]
+      x: [-12., 42.]
+      y: [33., 72.]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+
+renewable:
+  onwind:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      add_cutout_windspeed: true
+  offwind-ac:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    min_shore_distance: 1000
+    landfall_length: 10
+  offwind-dc:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    landfall_length: 10
+  offwind-float:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: [44, 255]
+    min_shore_distance: 1000
+    landfall_length: 10
+
+costs:
+  year: 2030
+
+clustering:
+  temporal:
+    resolution_sector: 6h
+
+solving:
+  options:
+    noisy_costs: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 0
+  solver_options:
+    gurobi-default:
+      threads: 8
+      BarConvTol: 1.e-6
+  mem_mb: 100000
+  runtime: 6h

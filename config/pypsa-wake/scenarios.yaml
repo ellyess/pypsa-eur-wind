@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# ============================================================================
+# HARMONISED SCENARIO DEFINITIONS for the Applied Energy wake paper
+# ============================================================================
+# One scenario grid shared by the North Sea (config.northsea.yaml) and the
+# pan-European (config.europe.yaml) runs, so that EVERY result in the manuscript
+# comes from a single, internally consistent configuration (resolves C3).
+#
+# A scenario sets only the two deliberately-varied dimensions:
+#   (1) electricity.wake_model.method  -> the wake formulation
+#   (2) spatial_mods.offshore_threshold -> the offshore spatial resolution (km^2)
+# Everything else (turbine, density, carriers, year, temporal, CO2, ...) is
+# fixed in the two config.*.yaml base files.
+#
+# Wake-method  ->  paper label:
+#   base      ->  No-wake baseline   (NoWake; reference, no wake loss)
+#   standard  ->  Uniform scaling    (alpha = 0.8855)
+#   glaum     ->  Capacity tiers     (TierCap; Glaum et al.)
+#   new_more  ->  Density tiers      (TierDensity; this work)
+#
+# Resolutions (offshore_threshold, km^2): 1000000, 100000, 50000, 10000, 5000, 1000
+#   onshore_threshold is False everywhere (this paper varies OFFSHORE resolution
+#   only). bias_corr is False everywhere (bias correction is out of scope).
+#
+# Naming: {method}-s{offshore_threshold}-biasFalse  (must match run.name).
+# ============================================================================
+
+# -------------------- base = No-wake baseline (NoWake) ----------------------
+base-s1000000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 1000000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+base-s100000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 100000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+base-s50000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 50000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+base-s10000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 10000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+base-s5000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 5000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+base-s1000-biasFalse:
+    electricity: {wake_model: {method: base}}
+    spatial_mods: {offshore_threshold: 1000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+# -------------------- standard = Uniform scaling (alpha=0.8855) -------------
+standard-s100000-biasFalse:
+    electricity: {wake_model: {method: standard}}
+    spatial_mods: {offshore_threshold: 100000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+standard-s50000-biasFalse:
+    electricity: {wake_model: {method: standard}}
+    spatial_mods: {offshore_threshold: 50000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+standard-s10000-biasFalse:
+    electricity: {wake_model: {method: standard}}
+    spatial_mods: {offshore_threshold: 10000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+standard-s5000-biasFalse:
+    electricity: {wake_model: {method: standard}}
+    spatial_mods: {offshore_threshold: 5000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+standard-s1000-biasFalse:
+    electricity: {wake_model: {method: standard}}
+    spatial_mods: {offshore_threshold: 1000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+# -------------------- glaum = Capacity tiers (TierCap) ----------------------
+glaum-s100000-biasFalse:
+    electricity: {wake_model: {method: glaum}}
+    spatial_mods: {offshore_threshold: 100000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+glaum-s50000-biasFalse:
+    electricity: {wake_model: {method: glaum}}
+    spatial_mods: {offshore_threshold: 50000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+glaum-s10000-biasFalse:
+    electricity: {wake_model: {method: glaum}}
+    spatial_mods: {offshore_threshold: 10000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+glaum-s5000-biasFalse:
+    electricity: {wake_model: {method: glaum}}
+    spatial_mods: {offshore_threshold: 5000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+glaum-s1000-biasFalse:
+    electricity: {wake_model: {method: glaum}}
+    spatial_mods: {offshore_threshold: 1000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+# -------------------- new_more = Density tiers (TierDensity, this work) -----
+new_more-s1000000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 1000000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+new_more-s100000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 100000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+new_more-s50000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 50000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+new_more-s10000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 10000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+new_more-s5000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 5000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}
+
+new_more-s1000-biasFalse:
+    electricity: {wake_model: {method: new_more}}
+    spatial_mods: {offshore_threshold: 1000, onshore_threshold: False}
+    renewable:
+        onwind: {resource: {bias_corr: False}}
+        offwind-ac: {resource: {bias_corr: False}}
+        offwind-dc: {resource: {bias_corr: False}}
+        offwind-float: {resource: {bias_corr: False}}

@@ -223,19 +223,6 @@ rule all:
         lambda w: balance_map_paths("static", w),
         lambda w: balance_map_paths("interactive", w),
     default_target: True
-# rule all:
-#     input:
-#         expand(
-#             RESULTS
-#             + "postnetworks/base_s_{clusters}_l{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
-#             run=config["run"]["name"],
-#             clusters=config["scenario"]["clusters"],
-#             ll=config["scenario"]["ll"],
-#             opts=config["scenario"]["opts"],
-#             sector_opts=config["scenario"]["sector_opts"],
-#             planning_horizons=config["scenario"]["planning_horizons"]
-#         ),
-#     default_target: True
 
 
 rule create_scenarios:
