@@ -1496,6 +1496,13 @@ if __name__ == "__main__":
     # Load network
     n = pypsa.Network(snakemake.input.network)
     planning_horizons = snakemake.wildcards.get("planning_horizons", None)
+    # Electricity-only solves carry no `planning_horizons` wildcard, so
+    # horizon-indexed constraints (e.g. the CCL offshore floor) receive None.
+    # Fall back to the scenario's single planning horizon from the config.
+    if planning_horizons is None:
+        _phs = snakemake.config.get("scenario", {}).get("planning_horizons", [])
+        if len(_phs) == 1:
+            planning_horizons = str(_phs[0])
 
     # Prepare network (settings before solving)
     prepare_network(

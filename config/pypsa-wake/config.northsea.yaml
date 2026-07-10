@@ -157,6 +157,20 @@ clustering:
     resolution_sector: 6h
 
 solving:
+  # Offshore wind is not cost-competitive against onshore+solar on the current
+  # (2030) cost data, so it does not deploy endogenously and every wake model
+  # returns the same objective. Impose a per-country offshore capacity floor
+  # from the Esbjerg (2022) / Ostend (2023) North Sea declarations (112 GW
+  # total) via PyPSA-Eur's country-carrier-limit (CCL) constraint. The wake
+  # models then differ in how that committed capacity is derated and sited.
+  # Targets are in data/agg_p_nom_minmax_northsea.csv; adjust there.
+  constraints:
+    CCL: true
+  agg_p_nom_limits:
+    file: data/agg_p_nom_minmax_northsea.csv
+    agg_offwind: true
+    agg_solar: false
+    include_existing: false
   options:
     noisy_costs: false
     min_iterations: 4
