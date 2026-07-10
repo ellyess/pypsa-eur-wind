@@ -15,7 +15,7 @@ runs built offshore wind at different absolute scales).
 - **Offshore mode:** `dominant` (one carrier per region; the validated simplification)
 - **Turbine / density:** NREL 12 MW offshore, `capacity_per_sqkm: 4`, `correction_factor: 1`
 - **Weather / horizon:** ERA5 cutout `europe-2023-sarah3-era5` (2023), planning year 2030, overnight foresight
-- **Temporal resolution:** 6 h
+- **Temporal resolution:** 6 h, set via `clustering.temporal.resolution_elec` (1460 snapshots). These are electricity-only runs, so `resolution_sector` alone would be inert and every run would solve all 8760 hourly snapshots.
 - **Scope:** electricity-only (both domains — see Decision 2)
 - **Onshore resolution:** not split (`onshore_threshold: false`) — this paper varies **offshore** resolution only
 - **Bias correction:** off (`bias_corr: False`) — out of scope for this paper
@@ -34,6 +34,20 @@ runs built offshore wind at different absolute scales).
 2. **Europe scope** — *electricity-only by default*, for consistency with the North Sea runs. The thesis Europe run (ch. 9) was sector-coupled (electrolysers/H₂). Sector coupling needs the sector workflow, not the elec-only rules. **→ keep elec-only (recommended, consistent) or reproduce the sector-coupled Europe?**
 3. **Europe wake models** — default NoWake + TierDensity only (transferability check). **→ add Uniform + TierCap at continental scale to show the collapse there too?**
 4. **Resolution grid** — default 3 North Sea resolutions (thesis-matching). **→ run the full 5-point sweep (adds 50 000 / 5 000) for smoother invariance curves?**
+
+## Before running: clear the `wake_extra/` caches
+
+`wake_helpers` keys its availability-matrix and profile caches on
+`(clusters, technology, threshold)` plus `(bias, correction_factor)` — **not**
+on the cutout, snapshot range, turbine, `capacity_per_sqkm`, or land-use
+exclusions. `cluster_network` writes the split-region geojsons only when the
+file does not already exist. So a run started against caches built under a
+different configuration will silently reuse them, which is exactly how the
+earlier inconsistent `figures/wakes/*.csv` came about.
+
+Move `wake_extra/{northsea,europe}/` aside before any rerun whose
+configuration has changed. (Done on 2026-07-10; see
+`wake_extra/_stale-2026-07-10/README.md`.)
 
 ## How to run (snakemake, from repo root)
 ```bash

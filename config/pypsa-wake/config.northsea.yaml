@@ -142,6 +142,11 @@ costs:
 
 clustering:
   temporal:
+    # These are electricity-only runs, so `prepare_network` reads
+    # `resolution_elec`. `resolution_sector` is only consumed by the sector
+    # workflow and is inert here: leaving it alone would solve all 8760
+    # hourly snapshots instead of the 1460 six-hourly ones the thesis used.
+    resolution_elec: 6h
     resolution_sector: 6h
 
 solving:

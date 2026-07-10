@@ -138,6 +138,9 @@ costs:
 
 clustering:
   temporal:
+    # Electricity-only: `prepare_network` reads `resolution_elec`.
+    # See config.northsea.yaml.
+    resolution_elec: 6h
     resolution_sector: 6h
 
 solving:
