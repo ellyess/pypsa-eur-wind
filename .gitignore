@@ -94,3 +94,6 @@ entsoe-api-key.txt
 /docs
 /plots
 *.tex
+
+# macOS
+.DS_Store
