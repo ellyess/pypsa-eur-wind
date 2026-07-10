@@ -78,6 +78,13 @@ spatial_mods:
   onshore_threshold: false        # onshore NOT split (offshore resolution only)
 
 electricity:
+  # The thesis wake run carried a binding CO2Limit of 77.5 Mt (shadow price
+  # ~86 EUR/t) and this is what its Fig. 7.9-7.14 rest on. Without it, unabated
+  # fossil is cheaper than offshore wind, nothing offshore is built, and every
+  # wake formulation returns the same objective: the study degenerates.
+  # Written out in full: YAML 1.1 reads `7.75e7` as a string, not a float.
+  co2limit_enable: true
+  co2limit: 77500000.0
   wake_model:
     method: base                  # overridden per scenario
   extendable_carriers:

@@ -31,12 +31,17 @@ runs built offshore wind at different absolute scales).
 
 ## Decisions
 
-1. **CO₂ cap — off.** *Settled 2026-07-10.* Matches the thesis wake run, which
-   inherited `config.default.yaml`'s `co2limit_enable: false`. (The thesis
-   *spatial* chapter used a 7.75 × 10⁷ t cap; a 2030 cap would be more
-   defensible in isolation but moves absolute build-out away from the canonical
-   Fig. 7.9–7.14.) To revisit, set `co2limit_enable: true` + `co2limit:` under
-   `electricity:` in *both* configs.
+1. **CO₂ cap — on, 7.75 × 10⁷ t.** *Settled 2026-07-10.* An earlier version of
+   this file claimed the thesis wake run had no cap. **That was wrong.** Reading
+   `results/thesis-wake-.../base-s1000-biasFalse` shows a binding `CO2Limit` of
+   77.5 Mt with a shadow price of ≈86 EUR/t, and its 46.44 GW offshore build-out
+   and 53.995 bn EUR objective are exactly the canonical `base`/`s1000` values.
+
+   The cap is not a matter of taste here. Run without it and unabated fossil
+   undercuts offshore wind (107 GW CCGT, 43 GW coal), **zero** offshore capacity
+   is built, and all four wake formulations return an identical objective — the
+   study has no result space at all. Verified by running the full sweep with the
+   cap off on 2026-07-10.
 2. **Europe scope — electricity-only.** *Settled 2026-07-10*, for consistency
    with the North Sea runs; whether the manuscript needs sector-coupled runs
    will be assessed after the results are in. Note that §3.7's "~2.9 %

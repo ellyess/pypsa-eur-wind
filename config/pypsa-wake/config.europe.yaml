@@ -74,6 +74,11 @@ spatial_mods:
   onshore_threshold: false        # onshore NOT split (offshore resolution only)
 
 electricity:
+  # See config.northsea.yaml: without a CO2 cap no offshore wind is built and
+  # every wake formulation returns the same objective.
+  # Written out in full: YAML 1.1 reads `7.75e7` as a string, not a float.
+  co2limit_enable: true
+  co2limit: 77500000.0
   wake_model:
     method: base                  # overridden per scenario
   extendable_carriers:
