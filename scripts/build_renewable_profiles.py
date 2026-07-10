@@ -238,8 +238,28 @@ if __name__ == "__main__":
     )
     start = time.time()
 
-    fn = snakemake.input.resource_regions
-    resource_regions = gpd.read_file(fn).set_index("name").rename_axis("bus").geometry
+    # Resource classes are binned per region, and the result is multiplied by
+    # the availability matrix. With variable spatial resolution the matrix is
+    # built over the *split* regions, so the unsplit file the rule points at
+    # shares no bus with it and the product is empty. Load the same regions
+    # `determine_availability_matrix` used.
+    resource_regions = load_regions(
+        technology, threshold, wake_dir, snakemake.input.resource_regions
+    )
+    if "name" in resource_regions.columns:
+        resource_regions = resource_regions.set_index("name").rename_axis("bus")
+    resource_regions = resource_regions.geometry
+
+    available_buses = pd.Index(availability.coords["bus"].values, name="bus")
+    missing = available_buses.difference(resource_regions.index)
+    if not missing.empty:
+        raise ValueError(
+            f"{technology}: availability matrix has {len(missing)} bus(es) with "
+            f"no resource region, e.g. {list(missing[:5])}. The availability "
+            "matrix and the resource regions were built from different region "
+            "sets."
+        )
+    resource_regions = resource_regions.loc[available_buses]
 
     # indicator matrix for which cells touch which regions
     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
