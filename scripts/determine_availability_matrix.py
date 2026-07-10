@@ -65,6 +65,7 @@ from scripts._helpers import configure_logging, load_cutout, set_scenario_config
 from wake_helpers import (
     atomic_write,
     get_spatial_mods,
+    get_threshold,
     get_wake_dir,
     load_regions,
     availability_cache_path,
@@ -89,18 +90,14 @@ if __name__ == "__main__":
     technology = snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
-    # Variable spatial resolution: cache lookup.
-    #
-    # Availability (depth, shipping, protected areas) is computed on the
-    # UNSPLIT regions here and redistributed onto the split sub-regions in
-    # build_renewable_profiles. atlite undercounts land-use availability on
-    # regions at or below its grid resolution, so running the exclusion pass
-    # over the ~1000 km² Voronoi split regions collapses the available area by
-    # ~7x. The unsplit pass is robust, and it does not depend on the split
-    # threshold, so all thresholds share one cache entry (threshold=None).
+    # Variable spatial resolution: cache lookup
     mods = get_spatial_mods(snakemake.config)
     clusters = snakemake.wildcards.clusters
-    threshold = None
+    threshold = (
+        get_threshold(mods, technology)
+        if technology.startswith(("onwind", "offwind"))
+        else None
+    )
     wake_dir = get_wake_dir(mods)
     cache_path = availability_cache_path(wake_dir, clusters, technology, threshold)
 
