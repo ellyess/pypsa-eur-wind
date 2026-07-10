@@ -14,14 +14,40 @@ For upstream contributions, use:
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import geopandas as gpd
 
 _logger = logging.getLogger(__name__)
 
 PathLike = Union[str, Path]
+
+
+def atomic_write(write: Callable[[Path], None], target: PathLike) -> Path:
+    """Write to *target* atomically, via a temporary file in the same directory.
+
+    The caches under ``wake_extra/`` are keyed on the technology and the area
+    threshold only, so every run that shares those writes the same path. With
+    several runs in flight, two jobs writing the file directly will interleave
+    and corrupt it, or trip netCDF4's file cache. ``os.replace`` is atomic on
+    the same filesystem, so a reader sees either the previous file or the
+    complete new one, and the last writer simply wins.
+    """
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    handle, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=f"{target.name}.")
+    os.close(handle)
+    tmp = Path(tmp_name)
+    try:
+        write(tmp)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return target
 
 # ---------------------------------------------------------------------------
 # Re-exports from upstream-bound modules

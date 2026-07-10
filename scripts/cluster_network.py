@@ -76,6 +76,7 @@ from scripts._helpers import configure_logging, set_scenario_config
 
 # Variable spatial resolution: wake helpers and region splitting
 from wake_helpers import (
+    atomic_write,
     get_spatial_mods,
     get_threshold,
     get_wake_dir,
@@ -828,12 +829,18 @@ if __name__ == "__main__":
                 clustered.to_crs(epsg=4326) if clustered.crs.to_epsg() != 4326
                 else clustered
             )
+            # Atomic: several runs share this cache path and may write at once.
             if threshold is None:
-                clustered_4326.to_file(cache_path, driver="GeoJSON")
+                atomic_write(
+                    lambda tmp: clustered_4326.to_file(tmp, driver="GeoJSON"),
+                    cache_path,
+                )
                 logger.info(f"Wrote unsplit {tech} regions to {cache_path}")
             else:
                 meshed = split_regions(clustered_4326, threshold_km2=threshold)
-                meshed.to_file(cache_path, driver="GeoJSON")
+                atomic_write(
+                    lambda tmp: meshed.to_file(tmp, driver="GeoJSON"), cache_path
+                )
                 logger.info(
                     f"Split {tech} regions (threshold={threshold} km²) "
                     f"→ {len(meshed)} sub-regions, saved to {cache_path}"

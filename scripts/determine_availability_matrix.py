@@ -63,6 +63,7 @@ from scripts._helpers import configure_logging, load_cutout, set_scenario_config
 
 # Variable spatial resolution: cache and region loading
 from wake_helpers import (
+    atomic_write,
     get_spatial_mods,
     get_threshold,
     get_wake_dir,
@@ -213,8 +214,9 @@ if __name__ == "__main__":
         )
         availability.loc[availability_MDUA.coords] = availability_MDUA
 
-    # Save to cache
+    # Save to cache. Atomic, because runs sharing a resolution share this
+    # cache path and may be in flight at the same time.
     logger.info(f"Caching availability matrix to {cache_path}")
-    availability.to_netcdf(cache_path)
+    atomic_write(availability.to_netcdf, cache_path)
 
     availability.to_netcdf(snakemake.output["nc"])

@@ -90,6 +90,7 @@ from scripts.build_shapes import _simplify_polys
 
 # Variable spatial resolution: cache and region loading
 from wake_helpers import (
+    atomic_write,
     get_spatial_mods,
     get_threshold,
     get_wake_dir,
@@ -401,9 +402,13 @@ if __name__ == "__main__":
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
 
     # Save to cache. Both of the rule's outputs are cached, so that a later
-    # cache hit can restore the job completely.
+    # cache hit can restore the job completely. The writes are atomic because
+    # runs sharing a resolution share this cache path and may run concurrently.
     logger.info(f"Caching profile to {cache_path}")
-    ds.to_netcdf(cache_path)
-    copy2(snakemake.output.class_regions, class_regions_cache_path)
+    atomic_write(ds.to_netcdf, cache_path)
+    atomic_write(
+        lambda tmp: copy2(snakemake.output.class_regions, tmp),
+        class_regions_cache_path,
+    )
 
     ds.to_netcdf(snakemake.output.profile)
