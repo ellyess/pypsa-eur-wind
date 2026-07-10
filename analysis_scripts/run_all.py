@@ -26,6 +26,11 @@ RESULTS_ROOT = REPO / "results"
 PLOTS_ROOT = REPO / "plots"
 DATA_ROOT = HERE / "data"
 
+# The wake chapter's run directory. Set to the harmonised rerun produced by
+# `config/pypsa-wake/config.northsea.yaml`; the older `thesis-wake-*` run mixed
+# configurations and its `base` scenario silently carried the uniform derate.
+WAKE_RUN = RESULTS_ROOT / "paper-northsea-2030-10-dominant-6h"
+
 # ---------------------------------------------------------------------------
 # Chapter definitions
 #
@@ -42,7 +47,7 @@ CHAPTERS = {
     "wake_extract": {
         "script": "extract_wake_data.py",
         "args": [
-            "--results-dir", str(RESULTS_ROOT / "thesis-wake-2030-10-northsea-dominant-6h"),
+            "--results-dir", str(WAKE_RUN),
             "--out-dir", str(DATA_ROOT / "wake_extracted"),
             "--scenarios", "base", "standard", "glaum", "new_more",
             "--splits", "1000", "10000", "100000",
@@ -59,7 +64,7 @@ CHAPTERS = {
             "--system", str(DATA_ROOT / "wake_extracted" / "system_metrics.csv"),
             "--resolution", str(DATA_ROOT / "wake_extracted" / "resolution_metrics.csv"),
             "--scenarios", "base", "standard", "glaum", "new_more",
-            "--networks-dir", str(RESULTS_ROOT / "thesis-wake-2030-10-northsea-dominant-6h"),
+            "--networks-dir", str(WAKE_RUN),
             "--out-dir", str(PLOTS_ROOT / "wake_analysis"),
         ],
         "depends": ["wake_extract"],
@@ -137,7 +142,7 @@ CHAPTERS = {
     "wake_extra": {
         "script": "wake_extra_plots.py",
         "args": [
-            "--results-dir", str(RESULTS_ROOT / "thesis-wake-2030-10-northsea-dominant-6h"),
+            "--results-dir", str(WAKE_RUN),
             "--out-dir", str(PLOTS_ROOT / "wake_analysis"),
         ],
     },
