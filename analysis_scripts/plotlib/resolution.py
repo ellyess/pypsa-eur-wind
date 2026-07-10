@@ -83,6 +83,7 @@ def plot_vs_density(
     hue: str = "scenario",
     xlabel: str = r"Capacity density [MW km$^{-2}$]",
     ylabel: str | None = None,
+    marker: str | None = "o",
     height_cm: float = 6.0,
     width: str = "FULL_WIDTH",
     ax=None,
@@ -92,6 +93,8 @@ def plot_vs_density(
     This is the companion to :func:`plot_vs_resolution`: the tiered-density
     formulation is a function of density by construction, so all its
     resolution points collapse onto a single curve here.
+
+    Pass ``marker=None`` for densely sampled analytic curves.
     """
     missing = {x, y, hue} - set(df.columns)
     if missing:
@@ -107,7 +110,7 @@ def plot_vs_density(
     else:
         fig = ax.get_figure()
 
-    sns.lineplot(data=data, x=x, y=y, marker="o", ax=ax, **hue_opts)
+    sns.lineplot(data=data, x=x, y=y, marker=marker, ax=ax, **hue_opts)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel or y.replace("_", " ").capitalize())
 

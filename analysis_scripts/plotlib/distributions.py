@@ -51,6 +51,8 @@ def plot_distribution(
     *,
     hue: str = "scenario",
     split: str | None = None,
+    split_order=None,
+    split_label: str | None = None,
     xlabel: str | None = None,
     bins: int = 40,
     height_cm: float = 6.0,
@@ -73,6 +75,9 @@ def plot_distribution(
     split : str, optional
         Second grouping column, e.g. the spatial resolution. For ``box`` it
         becomes the x-axis; for ``pdf``/``cdf`` it becomes the line style.
+    split_order : sequence, optional
+        Order of the split levels. Resolution figures pass coarse -> fine, to
+        match the inverted axis of the line plots.
     xlabel : str, optional
         Overrides the axis label looked up from :data:`METRIC_LABELS`.
     ax : matplotlib.axes.Axes, optional
@@ -105,11 +110,13 @@ def plot_distribution(
     if kind in ("pdf", "cdf"):
         # Neither histplot nor ecdfplot accepts a second grouping dimension,
         # so a split is drawn as a line style and gets its own legend.
-        groups = (
-            [(None, data)]
-            if split is None
-            else list(data.groupby(split, sort=True, observed=True))
-        )
+        if split is None:
+            groups = [(None, data)]
+        elif split_order is not None:
+            groups = [(value, data[data[split] == value]) for value in split_order]
+        else:
+            groups = list(data.groupby(split, sort=True, observed=True))
+
         for index, (split_value, subset) in enumerate(groups):
             dash = _DASHES[index % len(_DASHES)]
             line_kwargs = {} if split is None else {"linestyle": dash}
@@ -143,6 +150,7 @@ def plot_distribution(
             data=data,
             x=split,
             y=value,
+            order=split_order,
             showfliers=False,
             linewidth=0.6,
             ax=ax,
@@ -151,6 +159,8 @@ def plot_distribution(
         ax.set_ylabel(_value_label(value, xlabel))
         if split is None:
             ax.set_xlabel("")
+        else:
+            ax.set_xlabel(split_label or split.replace("_", " ").capitalize())
 
     legend_above(ax, hue_opts["hue_order"])
     if split_styles:
