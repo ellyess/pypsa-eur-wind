@@ -49,6 +49,63 @@ def atomic_write(write: Callable[[Path], None], target: PathLike) -> Path:
         tmp.unlink(missing_ok=True)
     return target
 
+
+def reconstruct_split_availability(
+    availability_unsplit,
+    geom_unsplit,
+    geom_split,
+    parent_of,
+):
+    """Redistribute robust unsplit availability onto the split sub-regions.
+
+    atlite undercounts land-use availability on regions at or below its grid
+    resolution, so running the exclusion pass over the ~1000 km² Voronoi
+    split regions collapses the available offshore area by ~7x. The geometric
+    overlap, by contrast, is exact even for tiny regions. So compute
+    availability on the unsplit regions (robust) and attribute it to the split
+    sub-regions per grid cell:
+
+        M_split[s, cell] = G_split[s, cell]
+                           * M_unsplit[parent(s), cell] / G_unsplit[parent(s), cell]
+
+    where M is availability (with exclusions) and G is the exclusion-free
+    geometric overlap. Because the split regions partition their parents
+    (``sum_s G_split == G_unsplit`` per cell), availability is conserved:
+    ``sum_s M_split == M_unsplit``. Availability magnitude therefore comes from
+    the robust unsplit pass, while the split geometry — and hence the per-split
+    capacity factor detail computed downstream — is preserved.
+
+    Parameters
+    ----------
+    availability_unsplit, geom_unsplit : xr.DataArray
+        Availability (with exclusions) and geometric overlap over the unsplit
+        regions, dims ``(bus, y, x)`` with ``bus`` the parent region names.
+    geom_split : xr.DataArray
+        Geometric overlap over the split regions, ``bus`` the split names.
+    parent_of : mapping
+        Split region name -> parent (unsplit) region name.
+
+    Returns
+    -------
+    xr.DataArray
+        Split-region availability, dims ``(bus, y, x)`` with ``bus`` the split
+        names, in the same order as *geom_split*.
+    """
+    frac = (availability_unsplit / geom_unsplit.where(geom_unsplit > 0)).fillna(0.0)
+
+    split_names = list(geom_split.coords["bus"].values)
+    parents = [parent_of[name] for name in split_names]
+    # Gather each split region's parent fraction (parents repeat across splits),
+    # then relabel the bus axis from parent names to split names.
+    frac_split = frac.sel(bus=parents).assign_coords(bus=split_names)
+
+    availability_split = (geom_split * frac_split).clip(min=0.0)
+    availability_split = availability_split.where(
+        availability_split <= geom_split, geom_split
+    )
+    return availability_split
+
+
 # ---------------------------------------------------------------------------
 # Re-exports from upstream-bound modules
 # ---------------------------------------------------------------------------

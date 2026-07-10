@@ -96,6 +96,7 @@ from wake_helpers import (
     get_wake_dir,
     profile_cache_path,
     load_regions,
+    reconstruct_split_availability,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,6 +201,41 @@ if __name__ == "__main__":
     cutout = load_cutout(snakemake.input.cutout, time=sns)
 
     availability = xr.open_dataarray(snakemake.input.availability_matrix)
+
+    # The availability matrix is computed on the UNSPLIT regions, because atlite
+    # undercounts land-use availability on the ~1000 km² Voronoi split regions.
+    # When this technology is split, redistribute the robust unsplit
+    # availability onto the split sub-regions by their exact geometric overlap,
+    # which conserves the available area while giving each sub-region its own
+    # per-cell availability (and hence capacity factor) downstream.
+    if threshold is not None:
+        unsplit_regions = gpd.read_file(snakemake.input.resource_regions)
+        if "name" in unsplit_regions.columns:
+            unsplit_regions = unsplit_regions.set_index("name")
+        split_regions = load_regions(
+            technology, threshold, wake_dir, snakemake.input.resource_regions
+        )
+        if "name" in split_regions.columns:
+            split_regions = split_regions.set_index("name")
+
+        geom_kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
+        geom_unsplit = cutout.availabilitymatrix(
+            unsplit_regions.geometry, ExclusionContainer(), **geom_kwargs
+        )
+        geom_split = cutout.availabilitymatrix(
+            split_regions.geometry, ExclusionContainer(), **geom_kwargs
+        )
+        before = float(availability.sum())
+        availability = reconstruct_split_availability(
+            availability, geom_unsplit, geom_split, split_regions["bus_main"].to_dict()
+        )
+        logger.info(
+            "Redistributed availability onto %d split regions for %s "
+            "(available area conserved: %.1f%%).",
+            geom_split.sizes["bus"],
+            technology,
+            100 * float(availability.sum()) / before if before else float("nan"),
+        )
 
     # Variable spatial resolution: use split regions if available
     regions = load_regions(
