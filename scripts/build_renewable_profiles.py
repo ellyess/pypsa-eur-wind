@@ -99,6 +99,15 @@ from wake_helpers import (
 logger = logging.getLogger(__name__)
 
 
+def _atlite_supports_bias_correction() -> bool:
+    """Whether the installed atlite accepts a ``bias_corr`` keyword."""
+    import inspect
+
+    from atlite.convert import convert_wind
+
+    return "bias_corr" in inspect.signature(convert_wind).parameters
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
@@ -142,6 +151,23 @@ if __name__ == "__main__":
         if technology.startswith(("onwind", "offwind"))
         else None
     )
+
+    # `bias_corr` is understood only by the bias-corrected atlite fork
+    # (atlite-bc); `resource` is splatted straight into atlite's convert
+    # functions, and stock atlite raises TypeError on the unknown keyword.
+    # Drop it unless bias correction was actually asked for, and say so
+    # plainly when it was but cannot be honoured.
+    if "bias_corr" in resource:
+        if bias and not _atlite_supports_bias_correction():
+            raise ValueError(
+                f"renewable.{technology}.resource.bias_corr={bias!r} needs the "
+                "bias-corrected atlite fork (atlite-bc), but the installed "
+                "atlite does not accept a `bias_corr` argument. Install "
+                "atlite-bc, or set `bias_corr: false`."
+            )
+        if not bias:
+            resource.pop("bias_corr")
+
     wake_dir = get_wake_dir(mods)
     cache_path = profile_cache_path(
         wake_dir, clusters, technology, threshold,
