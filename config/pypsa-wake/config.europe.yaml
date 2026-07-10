@@ -115,7 +115,7 @@ renewable:
       add_cutout_windspeed: true
     capacity_per_sqkm: 4
     correction_factor: 1
-    corine: [44, 255]
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
     min_shore_distance: 1000
     landfall_length: 10
   offwind-dc:
@@ -125,7 +125,7 @@ renewable:
       add_cutout_windspeed: true
     capacity_per_sqkm: 4
     correction_factor: 1
-    corine: [44, 255]
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
     landfall_length: 10
   offwind-float:
     cutout: europe-2023-sarah3-era5
@@ -134,7 +134,7 @@ renewable:
       add_cutout_windspeed: true
     capacity_per_sqkm: 4
     correction_factor: 1
-    corine: [44, 255]
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
     min_shore_distance: 1000
     landfall_length: 10
 
