@@ -132,12 +132,53 @@ CHAPTERS = {
             "--outdir", str(REPO / "wake_extra" / "new_more_fit"),
         ],
     },
+
+    # ---- Extra wake figures, built straight from the solved networks ----
+    "wake_extra": {
+        "script": "wake_extra_plots.py",
+        "args": [
+            "--results-dir", str(RESULTS_ROOT / "thesis-wake-2030-10-northsea-dominant-6h"),
+            "--out-dir", str(PLOTS_ROOT / "wake_analysis"),
+        ],
+    },
+
+    # ---- Robustness check: standard vs dominant offshore carrier selection ----
+    # Takes no arguments; its input paths are module constants.
+    "standard_vs_dominant": {
+        "script": "compare_standard_vs_dominant.py",
+        "args": [],
+    },
+
+    # ---- Validation against ENTSO-E; also no CLI ----
+    "validate_entsoe": {
+        "script": "validate_sensitivity_vs_entsoe.py",
+        "args": [],
+    },
+
+    # ---- Manuscript figure pipelines ----
+    "paper_wake": {
+        "script": "paper_wake/make_paper.py",
+        "args": [
+            "--data-dir", str(DATA_ROOT / "wake_extracted"),
+        ],
+        "depends": ["wake_extract"],
+    },
+    "paper_sensitivity": {
+        "script": "paper_sensitivity/make_paper.py",
+        "args": [
+            "--plots-dir", str(PLOTS_ROOT / "sensitivity"),
+            "--out", str(PLOTS_ROOT / "sensitivity"),
+        ],
+        "depends": ["sensitivity_tier1", "sensitivity_tier2"],
+    },
 }
 
 # Convenience aliases: --chapters wake  ->  wake_extract + wake_plot
 ALIASES = {
-    "wake": ["wake_extract", "wake_plot"],
+    "wake": ["wake_extract", "wake_plot", "wake_extra"],
     "sensitivity": ["sensitivity_tier1", "sensitivity_tier2"],
+    "validation": ["validate_entsoe"],
+    "papers": ["paper_wake", "paper_sensitivity"],
 }
 
 

@@ -2,9 +2,13 @@
 """
 Regenerate the wake manuscript's figures and metrics table.
 
-    python -m paper_wake.make_paper                 # everything, into the manuscript
+    python -m paper_wake.make_paper                    # into plots/paper_wake
+    python -m paper_wake.make_paper --to-manuscript    # into the manuscript
     python -m paper_wake.make_paper --only wake_loss_vs_resolution.pdf
-    python -m paper_wake.make_paper --out /tmp/figs --dry-run
+
+Writing into the manuscript is opt-in: those figures are the canonical ones
+copied from the thesis, and regenerating them from a stale extraction would
+silently replace the results the paper reports.
 
 Pointing the paper at a different model run is a matter of ``--data-dir``;
 no run name is hard-coded.
@@ -26,7 +30,7 @@ matplotlib.use("Agg")
 from paper_wake import figures as figs  # noqa: E402
 from paper_wake.loader import load, summarise  # noqa: E402
 from plotlib import savefig, use_style  # noqa: E402
-from plotlib.io import DATA_ROOT, MANUSCRIPT_IMAGES  # noqa: E402
+from plotlib.io import DATA_ROOT, MANUSCRIPT_IMAGES, PLOTS_ROOT  # noqa: E402
 
 
 def parse_args(argv=None):
@@ -40,8 +44,14 @@ def parse_args(argv=None):
     parser.add_argument(
         "--out",
         type=Path,
-        default=MANUSCRIPT_IMAGES,
-        help="Directory to write figures into (default: the manuscript's images/).",
+        default=None,
+        help="Directory to write figures into (default: plots/paper_wake).",
+    )
+    parser.add_argument(
+        "--to-manuscript",
+        action="store_true",
+        help=f"Write into the manuscript instead ({MANUSCRIPT_IMAGES}). "
+        "This overwrites the canonical figures, so it is opt-in.",
     )
     parser.add_argument(
         "--metrics",
@@ -66,6 +76,13 @@ def parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+
+    if args.out and args.to_manuscript:
+        print("error: pass either --out or --to-manuscript, not both", file=sys.stderr)
+        return 2
+    args.out = args.out or (
+        MANUSCRIPT_IMAGES if args.to_manuscript else PLOTS_ROOT / "paper_wake"
+    )
 
     if args.list:
         print("Built from the extracted CSVs:")
@@ -112,8 +129,9 @@ def main(argv=None) -> int:
             failed.append((name, error))
             print(f"FAILED {name}: {error}", file=sys.stderr)
             continue
-        written.append(savefig(fig, args.out / name))
-        print(f"wrote {args.out / name}")
+        path = savefig(fig, args.out / name)
+        written.append(path)
+        print(f"wrote {path}")
 
     if not args.dry_run:
         print(f"\n{len(written)} figure(s) written to {args.out}")

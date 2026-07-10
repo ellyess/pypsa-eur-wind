@@ -42,6 +42,7 @@ from thesis_colors import (
     WAKE_MODEL_COLORS,
 )
 from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, savefig_thesis
+from plotlib.io import PLOTS_ROOT as _PLOTS_ROOT, RESULTS_ROOT as _RESULTS_ROOT
 
 from network_utils import (
     load_network,
@@ -57,14 +58,12 @@ from network_utils import (
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-RESULTS_ROOT = Path(
-    "/Users/ellyess/Library/CloudStorage/OneDrive-ImperialCollegeLondon"
-    "/PhD/pypsa-eur-wind/results/thesis-wake-2030-10-northsea-dominant-6h"
-)
-OUT_DIR = Path(
-    "/Users/ellyess/Library/CloudStorage/OneDrive-ImperialCollegeLondon"
-    "/PhD/pypsa-eur-wind/plots/wake_analysis"
-)
+DEFAULT_RUN = "thesis-wake-2030-10-northsea-dominant-6h"
+
+# Overridden by --results-dir / --out-dir. They follow run_all.py's roots, which
+# honour the PYPSA_RESULTS_ROOT and PYPSA_PLOTS_ROOT environment variables.
+RESULTS_ROOT = _RESULTS_ROOT / DEFAULT_RUN
+OUT_DIR = _PLOTS_ROOT / "wake_analysis"
 NC_TEMPLATE = "{scenario}-s{split}-biasFalse/networks/base_s_10_elec_lvopt_.nc"
 
 SCENARIOS = ["base", "standard", "glaum", "new_more"]
@@ -644,12 +643,39 @@ def plot_cf_heatmap(
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def _parse_args(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Additional wake-chapter plots built from solved networks."
+    )
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=RESULTS_ROOT,
+        help=f"Run directory holding the solved networks (default: {RESULTS_ROOT}).",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=OUT_DIR,
+        help=f"Where to write the figures (default: {OUT_DIR}).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> None:
+    global RESULTS_ROOT, OUT_DIR
+
+    args = _parse_args(argv)
+    RESULTS_ROOT = args.results_dir
+    OUT_DIR = args.out_dir
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
     print("wake_extra_plots.py -- Additional thesis wake chapter plots")
     print("=" * 60)
+    print(f"results: {RESULTS_ROOT}")
 
     # ------------------------------------------------------------------
     # Load networks for default split (1000 km^2)

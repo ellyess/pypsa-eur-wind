@@ -39,8 +39,12 @@ import matplotlib.pyplot as plt
 from plotting_style import thesis_plot_style, apply_spatial_resolution_axis, add_resolution_markers, format_axes_standard, savefig_thesis
 from thesis_colors import SCENARIO_COLORS, get_color_cycle
 
-# Apply thesis-wide plotting style
-_style = thesis_plot_style()
+from plotlib import use_style
+
+# Apply the thesis theme once, via plotlib: it applies seaborn's theme first
+# and the thesis rcParams second, so seaborn cannot clobber the fonts, sizes
+# or spines. This file used to call sns.set_theme() itself.
+_style = use_style()
 cm, lw, ms, dpi = _style['cm'], _style['lw'], _style['ms'], _style['dpi']
 FULL_WIDTH = _style['FULL_WIDTH']
 HALF_WIDTH = _style['HALF_WIDTH']
@@ -68,19 +72,6 @@ BG_COLOUR = "#f0f0f0"
 LW = 0.25
 FACE = "#f0f0f0"
 EDGE = "black"
-
-# Seaborn/matplotlib theme (matching the thesis figure styling)
-custom_params = {
-    "xtick.bottom": True,
-    "axes.edgecolor": "black",
-    "axes.spines.right": False,
-    "axes.spines.top": False,
-    "mathtext.default": "regular",
-}
-sns.set_theme(style="ticks", rc=custom_params)
-
-# Re-apply thesis style after seaborn's set_theme to ensure canonical sizes
-thesis_plot_style()
 
 # Muted, print-safe palette consistent with the wake/bias chapter figures
 WAKE_COLORS = {
