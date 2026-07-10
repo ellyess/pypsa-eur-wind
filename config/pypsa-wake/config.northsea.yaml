@@ -48,8 +48,14 @@ run:
   scenarios:
     enable: true
     file: config/pypsa-wake/scenarios.yaml
+  # `policy: base` would share the base-network resources across the runs, but
+  # it is broken on upstream master: `process_cost_data` writes
+  # costs_{planning_horizons}_processed.csv to a per-run path while
+  # `add_electricity` reads it from the shared path, so the DAG fails with a
+  # MissingInputException (reproducible on pristine upstream). Until that is
+  # fixed, each run rebuilds its own resources.
   shared_resources:
-    policy: base
+    policy: false
 
 scenario:
   clusters:

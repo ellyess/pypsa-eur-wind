@@ -48,8 +48,9 @@ run:
   scenarios:
     enable: true
     file: config/pypsa-wake/scenarios.yaml
+  # See config.northsea.yaml: `policy: base` is broken on upstream master.
   shared_resources:
-    policy: base
+    policy: false
 
 scenario:
   clusters:
