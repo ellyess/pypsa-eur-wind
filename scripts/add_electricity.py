@@ -1296,9 +1296,27 @@ if __name__ == "__main__":
     )
 
     # --- Wake effect modeling ---
+    # "none" keeps upstream behaviour, where offshore wake losses are
+    # represented by the flat `correction_factor` applied to the profiles.
     wake_config = snakemake.config.get("electricity", {}).get("wake_model", {})
-    wake_method = wake_config.get("method", "flat")
+    wake_method = wake_config.get("method", "none")
     offshore_mode = snakemake.config.get("spatial_mods", {}).get("mode")
+
+    if wake_method not in ("none", "base", None, ""):
+        # An explicit wake model supersedes the flat correction_factor proxy.
+        # Applying both would double-count the losses.
+        double_counted = {
+            tech: cfg["correction_factor"]
+            for tech, cfg in snakemake.config.get("renewable", {}).items()
+            if tech.startswith("offwind") and cfg.get("correction_factor", 1.0) != 1.0
+        }
+        if double_counted:
+            raise ValueError(
+                f"Wake model {wake_method!r} is enabled, but these offshore "
+                f"carriers still apply a correction_factor: {double_counted}. "
+                "The wake model replaces that flat proxy; set "
+                "`correction_factor: 1` for them to avoid double-counting."
+            )
 
     if offshore_mode == "dominant":
         logger.info("Dropping non-dominant offshore wind generators.")
@@ -1340,7 +1358,10 @@ if __name__ == "__main__":
     update_p_nom_max(n)
 
     # --- Apply wake effects after capacity estimation ---
-    if wake_method in ("flat", "base", "standard"):
+    # "base" is the wake-free baseline; it must not pick up the flat derate.
+    if wake_method in ("none", "base", None, ""):
+        logger.info("No wake effects applied.")
+    elif wake_method in ("flat", "uniform", "standard"):
         coeffs = get_wake_coefficients(snakemake.config, "flat")
         derate = coeffs.get("derate_factor", 0.8855)
         logger.info(f"Applying flat wake derate factor: {derate}")
@@ -1368,8 +1389,6 @@ if __name__ == "__main__":
         add_wake_generators(
             n, snakemake.config, method=wake_method, regions_gdf=None
         )
-    elif wake_method in ("none", None, ""):
-        logger.info("No wake effects applied.")
     else:
         raise ValueError(f"Unknown wake method: {wake_method!r}")
 
