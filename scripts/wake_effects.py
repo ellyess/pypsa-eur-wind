@@ -40,6 +40,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Equal-area CRS for region areas, matching split_regions.split_regions.
+AREA_CRS = "EPSG:6933"
+
 
 # ---------------------------------------------------------------------------
 # Default wake coefficients
@@ -208,6 +211,22 @@ def _offwind_region_mapping(n) -> pd.Series:
     return gen_idx.to_series().str.replace(r" offwind-\w+", "", regex=True)
 
 
+def _ensure_region_area(regions_gdf):
+    """Return *regions_gdf* with an "area" column in km².
+
+    Regions produced by :mod:`split_regions` already carry an ``area``
+    column; the standard PyPSA-Eur offshore regions do not. Areas are
+    computed in the equal-area CRS used by :func:`split_regions.split_regions`
+    so both paths agree.
+    """
+    if "area" in regions_gdf.columns:
+        return regions_gdf
+
+    regions_gdf = regions_gdf.copy()
+    regions_gdf["area"] = regions_gdf.geometry.to_crs(AREA_CRS).area / 1e6
+    return regions_gdf
+
+
 def _split_profile_by_capacity(
     n,
     df: pd.DataFrame,
@@ -319,8 +338,9 @@ def add_wake_generators(
     method : str
         Wake model: "tiered_density" or "capacity_tiered".
     regions_gdf : GeoDataFrame, optional
-        Offshore regions with "name" and "area" columns. Required for
-        "tiered_density" method.
+        Offshore regions with a "name" column. Required for "tiered_density".
+        An "area" column in km² is used if present, otherwise derived from
+        the geometries.
     """
     if method not in {"tiered_density", "capacity_tiered", "new_more", "glaum"}:
         raise ValueError(f"Unknown wake method: {method!r}")
@@ -342,6 +362,7 @@ def add_wake_generators(
                 "regions_gdf is required for the tiered_density wake model."
             )
 
+        regions_gdf = _ensure_region_area(regions_gdf)
         offshore_reg = regions_gdf[["name", "area"]].set_index("name")
 
         wake_generators = wake_generators.assign(region=mapping.values)

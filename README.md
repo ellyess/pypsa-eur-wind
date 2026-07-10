@@ -330,3 +330,10 @@ Upstream contributions and design decisions are gratefully acknowledged.
 This repository represents **research code under active development**.
 Results obtained using this fork should be interpreted in the context of
 methodological exploration rather than operational modelling.
+
+## License
+
+The code in PyPSA-Eur is released as free software under the
+[MIT License](https://opensource.org/licenses/MIT), see [`doc/licenses.md`](doc/licenses.md).
+However, different licenses and terms of use may apply to the various
+input data, see [`doc/data_sources.md`](doc/data_sources.md).

@@ -18,10 +18,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from wake_effects import (
+    AREA_CRS,
     DEFAULT_CAPACITY_TIERED_COEFFICIENTS,
     DEFAULT_FLAT_COEFFICIENTS,
     DEFAULT_TIERED_DENSITY_COEFFICIENTS,
     WakeSplitSpec,
+    _ensure_region_area,
     add_wake_generators,
     capacity_tiered_wake_spec,
     drop_non_dominant_offwind_generators,
@@ -316,6 +318,27 @@ class TestAddWakeGenerators:
 
         # Generators should have been split into segments
         assert len(n.generators) >= 2
+
+    def test_tiered_density_derives_area_when_missing(self):
+        """Standard offshore regions carry no 'area' column; derive it."""
+        import geopandas as gpd
+        from shapely.geometry import box
+
+        regions_gdf = gpd.GeoDataFrame(
+            {"name": ["region0"], "geometry": [box(0.0, 0.0, 1.0, 1.0)]},
+            crs=4326,
+        )
+        assert "area" not in regions_gdf.columns
+
+        filled = _ensure_region_area(regions_gdf)
+        expected = regions_gdf.geometry.to_crs(AREA_CRS).area.iloc[0] / 1e6
+        assert filled["area"].iloc[0] == pytest.approx(expected)
+        # a one-degree square on the equator is roughly 12,300 km²
+        assert 10_000 < filled["area"].iloc[0] < 15_000
+
+        n = _make_mock_network(n_generators=1, p_nom_max=[10000.0])
+        add_wake_generators(n, {}, method="tiered_density", regions_gdf=regions_gdf)
+        assert len(n.generators) >= 1
 
     def test_invalid_method(self):
         n = _make_mock_network()
