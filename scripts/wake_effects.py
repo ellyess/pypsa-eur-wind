@@ -219,9 +219,30 @@ def capacity_tiered_wake_spec(coeffs: dict | None = None) -> WakeSplitSpec:
 
 
 def _offwind_region_mapping(n) -> pd.Series:
-    """Map offwind generator names to region names (without carrier suffix)."""
+    """
+    Map offwind generator names to their region key.
+
+    With resource classes, offshore generators are named
+    ``"{region} {resource_class} {carrier}"``, e.g.
+    ``"BE2 0AC_00000 0 offwind-ac"``. Only the carrier is stripped here: a bus
+    may legitimately end in a number ("GB0 0"), so ``"GB0 0 offwind-ac"`` is
+    ambiguous on its own. :func:`_resolve_region_keys` settles it against the
+    region names.
+    """
     gen_idx = n.generators.filter(like="offwind", axis=0).index
-    return gen_idx.to_series().str.replace(r" offwind-\w+", "", regex=True)
+    return gen_idx.to_series().str.replace(r"\s+offwind-[\w-]+$", "", regex=True)
+
+
+def _resolve_region_keys(keys: pd.Series, known) -> pd.Series:
+    """
+    Strip the resource-class index from the keys that carry one.
+
+    A key that already names a region is left alone; otherwise its final
+    whitespace-separated token is dropped, which is where the resource class
+    lives.
+    """
+    known = set(known)
+    return keys.map(lambda key: key if key in known else key.rsplit(" ", 1)[0])
 
 
 def _ensure_region_area(regions_gdf):
@@ -370,6 +391,7 @@ def add_wake_generators(n, config: dict, method: str, regions_gdf=None) -> None:
         regions_gdf = _ensure_region_area(regions_gdf)
         offshore_reg = regions_gdf[["name", "area"]].set_index("name")
 
+        mapping = _resolve_region_keys(mapping, offshore_reg.index)
         wake_generators = wake_generators.assign(region=mapping.values)
         wake_generators = wake_generators.join(offshore_reg, on="region")
 
@@ -445,6 +467,11 @@ def add_wake_generators(n, config: dict, method: str, regions_gdf=None) -> None:
     if not labels_all:
         return
 
+    # `pd.concat` discards the index name, which PyPSA's exporter looks the
+    # index up by. Restore whatever the network already used.
+    generators_index_name = n.generators.index.name
+    p_max_pu_columns_name = n.generators_t.p_max_pu.columns.name
+
     n.generators.drop(index=to_drop, inplace=True)
     n.generators_t.p_max_pu.drop(columns=to_drop, inplace=True)
 
@@ -453,7 +480,9 @@ def add_wake_generators(n, config: dict, method: str, regions_gdf=None) -> None:
 
     n.generators = pd.concat([n.generators, add_df], axis=0)
     n.generators_t.p_max_pu = pd.concat([n.generators_t.p_max_pu, add_t], axis=1)
-    n.generators_t.p_max_pu.columns.names = ["Generator"]
+
+    n.generators.index.name = generators_index_name
+    n.generators_t.p_max_pu.columns.name = p_max_pu_columns_name
 
     logger.info(
         "Applied %s wake model: split %d generators into %d segments.",

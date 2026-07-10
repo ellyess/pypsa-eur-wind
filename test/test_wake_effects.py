@@ -19,6 +19,7 @@ from scripts.wake_effects import (
     DEFAULT_UNIFORM_COEFFICIENTS,
     WakeSplitSpec,
     _ensure_region_area,
+    _resolve_region_keys,
     add_wake_generators,
     apply_wake_model,
     capacity_tiered_wake_spec,
@@ -28,12 +29,19 @@ from scripts.wake_effects import (
 )
 
 
-def _make_mock_network(n_generators=3, p_nom_max=None, timesteps=4):
-    """Create a minimal mock PyPSA network for testing wake effects."""
+def _make_mock_network(
+    n_generators=3, p_nom_max=None, timesteps=4, resource_class=False
+):
+    """Create a minimal mock PyPSA network for testing wake effects.
+
+    With ``resource_class`` the generators are named the way PyPSA-Eur names
+    them once resource classes are enabled: "{region} {class} {carrier}".
+    """
     if p_nom_max is None:
         p_nom_max = [5000.0, 3000.0, 1000.0]
 
-    gen_names = [f"region{i} offwind-ac" for i in range(n_generators)]
+    suffix = " 0 offwind-ac" if resource_class else " offwind-ac"
+    gen_names = [f"region{i}{suffix}" for i in range(n_generators)]
     generators = pd.DataFrame(
         {
             "p_nom_max": p_nom_max[:n_generators],
@@ -42,7 +50,7 @@ def _make_mock_network(n_generators=3, p_nom_max=None, timesteps=4):
             "carrier": ["offwind-ac"] * n_generators,
             "bus": [f"bus{i}" for i in range(n_generators)],
         },
-        index=gen_names,
+        index=pd.Index(gen_names, name="name"),
     )
 
     p_max_pu = pd.DataFrame(
@@ -50,7 +58,7 @@ def _make_mock_network(n_generators=3, p_nom_max=None, timesteps=4):
         columns=gen_names,
         index=pd.date_range("2023-01-01", periods=timesteps, freq="h"),
     )
-    p_max_pu.columns.names = ["Generator"]
+    p_max_pu.columns.name = "name"
 
     n = MagicMock()
     n.generators = generators
@@ -306,3 +314,59 @@ class TestApplyWakeModel:
         config = {"electricity": {"wake_model": {"method": "tiered_density"}}}
         with pytest.raises(ValueError, match="needs the offshore regions"):
             apply_wake_model(n, config)
+
+
+class TestResolveRegionKeys:
+    """PyPSA-Eur names generators "{region} {resource_class} {carrier}"."""
+
+    def test_key_that_names_a_region_is_left_alone(self):
+        keys = pd.Series(["GB0 0", "BE2 0AC_00001"])
+        known = ["GB0 0", "BE2 0AC_00001"]
+        assert list(_resolve_region_keys(keys, known)) == known
+
+    def test_trailing_class_index_is_stripped(self):
+        keys = pd.Series(["BE2 0AC_00001 0", "BE2 0AC_00002 3"])
+        known = ["BE2 0AC_00001", "BE2 0AC_00002"]
+        assert list(_resolve_region_keys(keys, known)) == known
+
+    def test_bus_ending_in_a_number_is_not_truncated(self):
+        """ "GB0 0 offwind-ac" is ambiguous; the region set disambiguates it."""
+        assert list(_resolve_region_keys(pd.Series(["GB0 0"]), ["GB0 0"])) == ["GB0 0"]
+        assert list(_resolve_region_keys(pd.Series(["GB0 0"]), ["GB0"])) == ["GB0"]
+
+
+class TestResourceClassNaming:
+    def test_tiered_density_handles_resource_class_suffix(self):
+        n = _make_mock_network(
+            n_generators=2, p_nom_max=[10000.0, 5000.0], resource_class=True
+        )
+        assert n.generators.index[0] == "region0 0 offwind-ac"
+        regions = _make_regions(["region0", "region1"])
+        regions["area"] = [5000.0, 3000.0]
+
+        add_wake_generators(n, {}, method="tiered_density", regions_gdf=regions)
+        assert len(n.generators) >= 2
+
+    def test_missing_region_still_raises(self):
+        n = _make_mock_network(n_generators=2, resource_class=True)
+        with pytest.raises(ValueError, match="Missing offshore region areas"):
+            add_wake_generators(
+                n, {}, method="tiered_density", regions_gdf=_make_regions(["region0"])
+            )
+
+
+class TestIndexNamesPreserved:
+    """PyPSA's exporter looks the index up by name; pd.concat drops it."""
+
+    def test_capacity_tiered_preserves_index_names(self):
+        n = _make_mock_network(n_generators=1, p_nom_max=[15000.0])
+        add_wake_generators(n, {}, method="capacity_tiered")
+        assert n.generators.index.name == "name"
+        assert n.generators_t.p_max_pu.columns.name == "name"
+
+    def test_tiered_density_preserves_index_names(self):
+        n = _make_mock_network(n_generators=1, p_nom_max=[10000.0])
+        regions = _make_regions(["region0"])
+        add_wake_generators(n, {}, method="tiered_density", regions_gdf=regions)
+        assert n.generators.index.name == "name"
+        assert n.generators_t.p_max_pu.columns.name == "name"
