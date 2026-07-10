@@ -71,6 +71,7 @@ adding up the installable potentials of the individual grid cells.
 import logging
 import time
 from itertools import product
+from shutil import copy2
 
 import geopandas as gpd
 import numpy as np
@@ -174,12 +175,21 @@ if __name__ == "__main__":
         bias=str(bias) if bias else None,
         correction_factor=correction_factor,
     )
+    # The rule has two outputs, so both must be cached: a hit that restored
+    # only the profile would leave `class_regions` missing and snakemake would
+    # fail the job with MissingOutputException.
+    # Appended, not `with_suffix`: the cache name can carry a correction factor
+    # like `_cf0.8855`, whose dot would otherwise be read as the extension.
+    class_regions_cache_path = cache_path.with_name(
+        cache_path.name + ".class_regions.geojson"
+    )
 
     # A cache hit short-circuits before dask is set up.
-    if cache_path.is_file():
+    if cache_path.is_file() and class_regions_cache_path.is_file():
         logger.info(f"Loading cached profile from {cache_path}")
         ds = xr.open_dataset(cache_path)
         ds.to_netcdf(snakemake.output.profile)
+        copy2(class_regions_cache_path, snakemake.output.class_regions)
         raise SystemExit(0)
 
     dask_kwargs = setup_dask(nprocesses)
@@ -390,8 +400,10 @@ if __name__ == "__main__":
         min_p_max_pu = params["clip_p_max_pu"]
         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
 
-    # Save to cache
+    # Save to cache. Both of the rule's outputs are cached, so that a later
+    # cache hit can restore the job completely.
     logger.info(f"Caching profile to {cache_path}")
     ds.to_netcdf(cache_path)
+    copy2(snakemake.output.class_regions, class_regions_cache_path)
 
     ds.to_netcdf(snakemake.output.profile)
