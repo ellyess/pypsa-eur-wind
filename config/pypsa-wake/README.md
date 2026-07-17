@@ -42,12 +42,15 @@ runs built offshore wind at different absolute scales).
    is built, and all four wake formulations return an identical objective — the
    study has no result space at all. Verified by running the full sweep with the
    cap off on 2026-07-10.
-2. **Europe scope — electricity-only.** *Settled 2026-07-10*, for consistency
-   with the North Sea runs; whether the manuscript needs sector-coupled runs
-   will be assessed after the results are in. Note that §3.7's "~2.9 %
-   continental cost" and `fig_europe_vs_northsea_offwind_cap.png` currently
-   come from the thesis's *sector-coupled* tier-2 sensitivity run, so the
-   electricity-only Europe run will give a different number for the same claim.
+2. **Europe scope — sector-coupled.** *Revised 2026-07-13 (user decision;
+   supersedes the 2026-07-10 electricity-only setting).* The paper's canonical
+   endogenous-deployment results come from the sector-coupled North Sea run, so
+   the continental transferability check must run in the same regime.
+   `config.europe.yaml` now mirrors `config.northsea-sector.yaml` (overnight
+   foresight, `co2_budget: {2030: 0.297}`, `resolution_elec: false`, no CCL
+   floor) with run prefix `paper-europe-sector-2030-30-dominant-6h`. Solve with
+   the sector workflow (same command as the North Sea sector run), not
+   `solve_elec_networks`.
 
 ### Still open
 3. **Europe wake models** — default NoWake + TierDensity only (transferability check). **→ add Uniform + TierCap at continental scale to show the collapse there too?**

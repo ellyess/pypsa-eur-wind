@@ -2,50 +2,52 @@
 # SPDX-License-Identifier: CC0-1.0
 #
 # ============================================================================
-# HARMONISED EUROPE CONFIG (SECTOR-COUPLED) -- Applied Energy wake paper
+# HARMONISED NORTH SEA CONFIG (SECTOR-COUPLED) -- Applied Energy wake paper
 # ============================================================================
-# Continental transferability check for the manuscript, SECTOR-COUPLED to match
-# the canonical North Sea endogenous-deployment experiment
-# (config.northsea-sector.yaml). Decision 2026-07-13: Europe is sector-coupled,
-# NOT electricity-only, so that the continental run tests exactly the regime the
-# paper's deployment results come from (offshore competes on its own economics;
-# no capacity floor needed).
+# Sector-coupled counterpart of config.northsea.yaml. Same fork-specific wake +
+# offshore-resolution settings, but the system is sector-coupled (heat, H2,
+# transport, industry) with an overnight 2030 CO2 budget instead of an
+# electricity-only CO2 cap.
 #
-# Same per-unit settings as the North Sea configs (dominant mode, 12 MW
-# turbines, capacity_per_sqkm 4, correction_factor 1, 2023 ERA5, 2030, 6 h);
-# differs ONLY in domain (25 countries, 31 buses, full European offshore).
-# Everything not set here inherits config.default.yaml (incl. the full
-# `sector:` block). Scenarios live in config/pypsa-wake/scenarios.yaml.
+# WHY SECTOR COUPLING: on 2030 electricity-only costs offshore wind is not
+# cost-competitive, so it does not deploy endogenously and every wake model
+# coincides -- the elec-only config.northsea.yaml has to FORCE offshore with a
+# capacity floor (CCL). Sector coupling raises and diversifies electricity
+# demand (electrified heat/transport, flexible electrolysis) so offshore
+# deploys on its own economics, and the wake derating then reduces deployment
+# (the right sign) via genuine cost competition -- reproducing the endogenous
+# deployment story of the original manuscript draft. Verified on the thesis
+# sector runs: TierDensity builds 36-48% less offshore than the no-wake
+# baseline, with the system substituting onshore wind + solar.
 #
-# Wake models: per the approved paper scope Europe is a transferability check
-# for TierDensity, so only base (NoWake) + new_more (TierDensity) are active.
-# Uncomment the standard/glaum blocks to also test Uniform + TierCap collapse
-# at continental scale.
+# Everything not set here inherits config.default.yaml (incl. the full `sector:`
+# block: transport/heating/H2/industry/biomass on). Scenarios (wake method x
+# offshore resolution) live in config/pypsa-wake/scenarios.yaml -- the SAME file
+# as the elec-only run, since it only sets electricity.wake_model.method and
+# spatial_mods.offshore_threshold.
 # ============================================================================
 
 foresight: overnight
 
 run:
-  # 31 buses, not 30: current upstream's cluster_network requires at least one
-  # bus per country-subnetwork, which is 31 for this 25-country selection
-  # ("Number of clusters must be 31 <= n_clusters <= 3676").
-  prefix: "paper-europe-sector-2030-31-dominant-6h"
+  prefix: "paper-northsea-sector-2030-10-dominant-6h"
   name:
     # --- No-wake baseline (NoWake)
-    - base-s1000000-biasFalse
     - base-s100000-biasFalse
     - base-s10000-biasFalse
+    - base-s1000-biasFalse
+    # --- Uniform scaling
+    - standard-s100000-biasFalse
+    - standard-s10000-biasFalse
+    - standard-s1000-biasFalse
+    # --- Capacity tiers (TierCap)
+    - glaum-s100000-biasFalse
+    - glaum-s10000-biasFalse
+    - glaum-s1000-biasFalse
     # --- Density tiers (TierDensity, this work)
-    - new_more-s1000000-biasFalse
     - new_more-s100000-biasFalse
     - new_more-s10000-biasFalse
-    # optional -- add Uniform / TierCap at continental scale:
-    # - standard-s1000000-biasFalse
-    # - standard-s100000-biasFalse
-    # - standard-s10000-biasFalse
-    # - glaum-s1000000-biasFalse
-    # - glaum-s100000-biasFalse
-    # - glaum-s10000-biasFalse
+    - new_more-s1000-biasFalse
   scenarios:
     enable: true
     file: config/pypsa-wake/scenarios.yaml
@@ -55,7 +57,7 @@ run:
 
 scenario:
   clusters:
-    - 31
+    - 10
   opts:
     - ''
   sector_opts:
@@ -63,28 +65,30 @@ scenario:
   planning_horizons:
     - 2030
 
-countries: ['AL', 'AT', 'BA', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'ES', 'FR', 'GB', 'GR', 'HR', 'IE', 'IT', 'LU', 'ME', 'MK', 'NL', 'NO', 'PT', 'RS', 'SE', 'SI']
+countries: ['BE', 'DK', 'NL', 'GB', 'FR', 'DE', 'NO']
 
 snapshots:
   start: "2023-01-01"
   end: "2024-01-01"
 
 # Sector-wide CO2 budget as a fraction of 1990 emissions of the modelled
-# countries; 2030 = 0.297 (~ -70%), same as the North Sea sector run.
+# countries. 2030 = 0.297 (~ -70%) matches the thesis sector run; overnight
+# foresight uses only the single planning-horizon value. The stricter budget is
+# what makes deep decarbonisation (and hence offshore wind) attractive.
 co2_budget:
   2030: 0.297
 
 # Fork-specific: variable OFFSHORE spatial resolution, dominant offshore mode.
-# sea_shape empty -> full European offshore domain (not clipped to the North Sea).
 spatial_mods:
   mode: dominant
-  sea_shape:
-  shared_files: europe
+  sea_shape: data/north_sea_shape_updated.geojson
+  shared_files: northsea
   offshore_threshold: 100000      # overridden per scenario
   onshore_threshold: false        # onshore NOT split (offshore resolution only)
 
 electricity:
-  # Sector coupling constrains CO2 via `co2_budget`, NOT the electricity-only cap.
+  # Sector coupling constrains CO2 via `co2_budget` (a global co2_atmosphere
+  # limit added in prepare_sector_network), NOT via the electricity-only cap.
   co2limit_enable: false
   wake_model:
     method: base                  # overridden per scenario
@@ -151,13 +155,15 @@ costs:
 clustering:
   temporal:
     # Sector-coupled solves take their temporal resolution from
-    # `resolution_sector`; `resolution_elec` MUST be false (time_aggregation
+    # `resolution_sector`; `resolution_elec` MUST be false here (time_aggregation
     # rejects a sector model that also sets resolution_elec). 6h -> 1460 snapshots.
     resolution_elec: false
     resolution_sector: 6h
 
 solving:
-  # No capacity floor: under sector coupling offshore deploys endogenously.
+  # NO capacity floor here (contrast config.northsea.yaml): under sector coupling
+  # offshore wind deploys endogenously, so the CCL/agg_p_nom_limits constraint is
+  # deliberately omitted. The wake models differ in how much offshore is built.
   options:
     noisy_costs: false
     min_iterations: 4
@@ -171,7 +177,5 @@ solving:
       threads: 8
       BarConvTol: 1.e-6
       crossover: 0
-  # 30-bus sector-coupled Europe is substantially heavier than the 10-bus North
-  # Sea; allow more memory/time headroom.
-  mem_mb: 150000
-  runtime: 24h
+  mem_mb: 120000
+  runtime: 12h

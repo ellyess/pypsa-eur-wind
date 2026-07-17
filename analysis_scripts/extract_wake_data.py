@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 import sys
 import warnings
 
@@ -85,15 +86,122 @@ def read_pypsa_csv(filepath: Path, skiprows: int = 4) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _region_key(gen_name: str) -> str:
+    """Region identity of an offshore generator, independent of wake tiering.
+
+    The tiered-density model splits a region's generator into capacity bands
+    named ``... offwind-float w1``, ``w2``, ...; the capacity-tiered and uniform
+    models keep one generator per region. Stripping the ``w<n>`` suffix maps
+    every wake generator back to the single base generator for its region, which
+    is the reference used to measure the wake loss.
+    """
+    return re.sub(r"\s+w\d+$", "", str(gen_name))
+
+
 def extract_wake_losses(scenario_dirs: dict[tuple[str, int], Path]) -> pd.DataFrame:
     """
-    Extract wake loss multipliers for each scenario and split.
-    Wake loss is calculated as the relative reduction in CF compared to the base scenario.
-    Base scenario has wake_loss = 0 (it's the reference without wake model).
-    Wake scenarios: wake_loss = 1 - (CF_wake / CF_base)
-    
-    Returns DataFrame with columns: scenario, split, wake_loss
+    Extract the wake-induced reduction in available capacity factor per region.
+
+    For each scenario/split we compare against the *base* (no-wake) network at the
+    same split. Every wake generator is matched to its base region via
+    :func:`_region_key` (exact, not a bus-average -- a per-bus mean mixes distinct
+    sub-regions and, combined with a ``max(0, .)`` clip, biased the mean upward at
+    coarse resolution). Within a region the wake generators are aggregated by
+    built capacity, so each region contributes one point:
+
+        available_cf(scenario) = sum_g p_max_pu.mean()_g * p_nom_opt_g / sum_g p_nom_opt_g
+        wake_loss              = 1 - available_cf(scenario) / available_cf(base)
+
+    Uniform derating reproduces exactly (a flat 1 - 0.8855 per region at every
+    resolution); tiered_density is resolution-invariant; capacity_tiered grows as
+    the resolution coarsens.
+
+    Returns DataFrame with columns: scenario, split, region, wake_loss, weight
+    (``weight`` is the region's built offshore capacity in MW, for a
+    capacity-weighted headline aggregation downstream).
     """
+    if pypsa is None:
+        print("Error: pypsa not available, cannot calculate from networks")
+        return pd.DataFrame(columns=['scenario', 'split', 'region', 'wake_loss', 'weight'])
+
+    # First pass: capacity-weighted available CF per (scenario, split, region).
+    per_region: dict[tuple[str, int], dict[str, dict[str, float]]] = {}
+
+    for (scenario, split), sdir in scenario_dirs.items():
+        n = load_network(sdir)
+        if n is None:
+            continue
+
+        offshore = n.generators[
+            n.generators.carrier.str.contains('offwind', case=False, na=False)
+        ]
+        if offshore.empty:
+            continue
+
+        pmax = n.generators_t.p_max_pu.mean()
+        acc: dict[str, dict[str, float]] = {}
+        for gen_name, gen in offshore.iterrows():
+            cf = pmax.get(gen_name, gen.get('p_max_pu', np.nan))
+            if not (pd.notna(cf) and 0 <= cf <= 1):
+                continue
+            # Weight by built capacity; fall back to p_nom_max, then to 1.0 so a
+            # region with nothing built still contributes an (unweighted) point.
+            w = gen.get('p_nom_opt', 0.0) or 0.0
+            if w <= 0:
+                w = gen.get('p_nom_max', 0.0) or 0.0
+            region = _region_key(gen_name)
+            bucket = acc.setdefault(region, {'cf_w': 0.0, 'w': 0.0, 'cf_sum': 0.0, 'n': 0})
+            bucket['cf_w'] += cf * w
+            bucket['w'] += w
+            bucket['cf_sum'] += cf
+            bucket['n'] += 1
+        per_region[(scenario, split)] = acc
+
+    # Reduce to one available_cf and one weight per region.
+    def region_cf(bucket: dict[str, float]) -> tuple[float, float]:
+        if bucket['w'] > 0:
+            return bucket['cf_w'] / bucket['w'], bucket['w']
+        return bucket['cf_sum'] / bucket['n'], 0.0
+
+    # Second pass: wake loss relative to base at the same split.
+    wake_loss_rows = []
+    splits = {split for (_, split) in per_region}
+    for split in splits:
+        base = per_region.get(('base', split))
+        if not base:
+            print(f"Warning: No base scenario for split={split}, skipping wake losses")
+            continue
+        base_cf = {region: region_cf(b)[0] for region, b in base.items()}
+
+        for (scenario, s), acc in per_region.items():
+            if s != split:
+                continue
+            for region, bucket in acc.items():
+                cf, weight = region_cf(bucket)
+                cf_base = base_cf.get(region)
+                if scenario == 'base':
+                    loss = 0.0
+                elif cf_base and cf_base > 0:
+                    loss = 1.0 - cf / cf_base
+                else:
+                    continue
+                wake_loss_rows.append({
+                    'scenario': scenario,
+                    'split': split,
+                    'region': region,
+                    'wake_loss': loss,
+                    'weight': weight,
+                })
+
+    if not wake_loss_rows:
+        print("Warning: No wake loss data calculated")
+        return pd.DataFrame(columns=['scenario', 'split', 'region', 'wake_loss', 'weight'])
+
+    return pd.DataFrame(wake_loss_rows)
+
+
+def _extract_wake_losses_legacy(scenario_dirs: dict[tuple[str, int], Path]) -> pd.DataFrame:
+    """Deprecated per-bus matcher kept for reference; see extract_wake_losses."""
     if pypsa is None:
         print("Error: pypsa not available, cannot calculate from networks")
         return pd.DataFrame(columns=['scenario', 'split', 'wake_loss'])

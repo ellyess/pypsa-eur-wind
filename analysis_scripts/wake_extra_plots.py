@@ -167,13 +167,20 @@ def _savefig(fig: plt.Figure, out: Path) -> None:
     plt.close(fig)
 
 
-def _nc_path(scenario: str, split: int) -> Path:
-    return RESULTS_ROOT / NC_TEMPLATE.format(scenario=scenario, split=split)
+def _nc_path(scenario: str, split: int) -> Path | None:
+    p = RESULTS_ROOT / NC_TEMPLATE.format(scenario=scenario, split=split)
+    if p.exists():
+        return p
+    # Electricity-only and sector-coupled runs name their solved network
+    # differently (base_s_10_elec_lvopt_.nc vs base_s_10___2030.nc); fall back
+    # to whatever single .nc the run wrote.
+    candidates = sorted(p.parent.glob("*.nc")) if p.parent.exists() else []
+    return candidates[0] if candidates else p
 
 
 def _load_if_exists(scenario: str, split: int) -> pypsa.Network | None:
     p = _nc_path(scenario, split)
-    if p.exists():
+    if p is not None and p.exists():
         return load_network(p)
     else:
         print(f"  [WARN] Network not found: {p}")

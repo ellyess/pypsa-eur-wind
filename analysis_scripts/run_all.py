@@ -26,10 +26,14 @@ RESULTS_ROOT = REPO / "results"
 PLOTS_ROOT = REPO / "plots"
 DATA_ROOT = HERE / "data"
 
-# The wake chapter's run directory. Set to the harmonised rerun produced by
-# `config/pypsa-wake/config.northsea.yaml`; the older `thesis-wake-*` run mixed
-# configurations and its `base` scenario silently carried the uniform derate.
-WAKE_RUN = RESULTS_ROOT / "paper-northsea-2030-10-dominant-6h"
+# The wake chapter's run directory. Set to the SECTOR-COUPLED harmonised rerun
+# (config/pypsa-wake/config.northsea-sector.yaml), where offshore wind deploys
+# endogenously and the wake models differentiate deployment. The electricity-only
+# rerun (paper-northsea-2030-10-dominant-6h) needed a CCL capacity floor and is
+# kept for reference; the older `thesis-wake-*` run mixed configurations and its
+# `base` scenario silently carried the uniform derate.
+WAKE_RUN = RESULTS_ROOT / "paper-northsea-sector-2030-10-dominant-6h"
+WAKE_EXTRACTED = DATA_ROOT / "wake_extracted_sector"
 
 # ---------------------------------------------------------------------------
 # Chapter definitions
@@ -48,7 +52,7 @@ CHAPTERS = {
         "script": "extract_wake_data.py",
         "args": [
             "--results-dir", str(WAKE_RUN),
-            "--out-dir", str(DATA_ROOT / "wake_extracted"),
+            "--out-dir", str(WAKE_EXTRACTED),
             "--scenarios", "base", "standard", "glaum", "new_more",
             "--splits", "1000", "10000", "100000",
             "--resolution-analysis",
@@ -58,11 +62,11 @@ CHAPTERS = {
         "script": "compare_wake_runs.py",
         "args": [
             "all",
-            "--wake-losses", str(DATA_ROOT / "wake_extracted" / "wake_losses.csv"),
-            "--wake-density", str(DATA_ROOT / "wake_extracted" / "wake_density.csv"),
-            "--cf-metrics", str(DATA_ROOT / "wake_extracted" / "cf_metrics.csv"),
-            "--system", str(DATA_ROOT / "wake_extracted" / "system_metrics.csv"),
-            "--resolution", str(DATA_ROOT / "wake_extracted" / "resolution_metrics.csv"),
+            "--wake-losses", str(WAKE_EXTRACTED / "wake_losses.csv"),
+            "--wake-density", str(WAKE_EXTRACTED / "wake_density.csv"),
+            "--cf-metrics", str(WAKE_EXTRACTED / "cf_metrics.csv"),
+            "--system", str(WAKE_EXTRACTED / "system_metrics.csv"),
+            "--resolution", str(WAKE_EXTRACTED / "resolution_metrics.csv"),
             "--scenarios", "base", "standard", "glaum", "new_more",
             "--networks-dir", str(WAKE_RUN),
             "--out-dir", str(PLOTS_ROOT / "wake_analysis"),
@@ -164,7 +168,7 @@ CHAPTERS = {
     "paper_wake": {
         "script": "paper_wake/make_paper.py",
         "args": [
-            "--data-dir", str(DATA_ROOT / "wake_extracted"),
+            "--data-dir", str(WAKE_EXTRACTED),
         ],
         "depends": ["wake_extract"],
     },

@@ -509,9 +509,20 @@ def update_wind_solar_costs(
                 f"Added connection cost of {connection_cost.min():0.0f}-{connection_cost.max():0.0f} Eur/MW/a to {tech}"
             )
 
-            n.generators.loc[n.generators.carrier == tech, "capital_cost"] = (
-                capital_cost.rename(index=lambda node: node + " " + tech)
+            # Assign the per-node capital cost to every generator of this
+            # carrier. The fork's tiered-density wake model splits an offshore
+            # generator into capacity-band sub-generators named
+            # "<node> <tech> w1/w2/..."; a plain index-aligned assignment misses
+            # those suffixed names and leaves them at 0 capital cost (free
+            # offshore wind, which the optimiser then builds to p_nom_max). Map
+            # each generator back to its "<node> <tech>" cost by stripping the
+            # tier suffix, so base and split sub-generators are both covered.
+            cc = capital_cost.rename(index=lambda node: node + " " + tech)
+            gen_mask = n.generators.carrier == tech
+            base_key = n.generators.index[gen_mask].str.replace(
+                r"\s+w\d+$", "", regex=True
             )
+            n.generators.loc[gen_mask, "capital_cost"] = base_key.map(cc).to_numpy()
 
 
 def add_carrier_buses(

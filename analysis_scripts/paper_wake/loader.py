@@ -113,11 +113,7 @@ def summarise(data: WakeData) -> pd.DataFrame:
         ]
     ].copy()
 
-    wake = (
-        data.wake_losses.groupby(["scenario", RESOLUTION], as_index=False)["wake_loss"]
-        .mean()
-        .rename(columns={"wake_loss": "wake_loss_mean"})
-    )
+    wake = _weighted_wake_loss(data.wake_losses)
     summary = summary.merge(wake, on=["scenario", RESOLUTION], how="left")
 
     medians = data.cf.groupby(["scenario", RESOLUTION], as_index=False)[
@@ -132,6 +128,29 @@ def summarise(data: WakeData) -> pd.DataFrame:
     summary["wake_loss_pct"] = summary["wake_loss_mean"] * 100.0
 
     return summary.sort_values(["scenario", RESOLUTION]).reset_index(drop=True)
+
+
+def _weighted_wake_loss(losses: pd.DataFrame) -> pd.DataFrame:
+    """Capacity-weighted mean wake loss per scenario x resolution.
+
+    ``extract_wake_data`` emits one row per region with a ``weight`` (built
+    offshore MW). The headline the manuscript quotes is the capacity-weighted
+    mean; where nothing is built (all weights zero) it degrades to a plain mean
+    so the number is still defined.
+    """
+    frame = losses.copy()
+    if "weight" not in frame.columns:
+        frame["weight"] = 1.0
+    frame["weight"] = frame["weight"].fillna(0.0)
+    frame["_wl_w"] = frame["wake_loss"] * frame["weight"]
+
+    grouped = frame.groupby(["scenario", RESOLUTION], as_index=False).agg(
+        _num=("_wl_w", "sum"), _den=("weight", "sum"), _plain=("wake_loss", "mean")
+    )
+    grouped["wake_loss_mean"] = (
+        (grouped["_num"] / grouped["_den"]).where(grouped["_den"] > 0, grouped["_plain"])
+    )
+    return grouped[["scenario", RESOLUTION, "wake_loss_mean"]]
 
 
 def _cost_delta_pct(summary: pd.DataFrame, baseline: str = "base") -> pd.Series:

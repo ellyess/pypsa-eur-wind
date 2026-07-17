@@ -53,8 +53,9 @@ class HeatSystem(Enum):
     SERVICES_URBAN_DECENTRAL = "services urban decentral"
     URBAN_CENTRAL = "urban central"
 
-    def __init__(self, *args):
-        super().__init__(*args)
+    # NB: no custom __init__ -- a str-valued Enum needs none, and the previous
+    # `def __init__(self, *args): super().__init__(*args)` forwarded the value to
+    # object.__init__, which raises TypeError under Python >= 3.14.
 
     def __str__(self) -> str:
         """

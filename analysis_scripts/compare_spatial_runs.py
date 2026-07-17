@@ -392,6 +392,7 @@ def plot_region_splits(
     regions_dir: str,
     filename_template: str = "regions_offshore_s{split}.geojson",
     out: str = "plots/spatial/region_splits.png",
+    include_onshore: bool = True,
 ):
     regions_dir = Path(regions_dir)
 
@@ -422,7 +423,7 @@ def plot_region_splits(
         has_data = False
 
         # Plot onshore first (background layer)
-        if fp_on.exists():
+        if include_onshore and fp_on.exists():
             gpd.read_file(fp_on).plot(
                 ax=ax[i],
                 linewidth=LW,
@@ -469,18 +470,23 @@ def plot_region_splits(
 
     # Add legend using proxy patches
     from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor=FACE_ONSHORE, edgecolor=EDGE_ONSHORE, linewidth=LW, label="Onshore"),
-        Patch(facecolor=FACE_OFFSHORE, edgecolor=EDGE_OFFSHORE, linewidth=LW, label="Offshore"),
-    ]
-    ax[-1].legend(
-        handles=legend_elements,
-        loc="lower right",
-        fontsize=6,
-        frameon=True,
-        framealpha=0.9,
-        edgecolor="none",
+    legend_elements = []
+    if include_onshore:
+        legend_elements.append(
+            Patch(facecolor=FACE_ONSHORE, edgecolor=EDGE_ONSHORE, linewidth=LW, label="Onshore")
+        )
+    legend_elements.append(
+        Patch(facecolor=FACE_OFFSHORE, edgecolor=EDGE_OFFSHORE, linewidth=LW, label="Offshore")
     )
+    if include_onshore:
+        ax[-1].legend(
+            handles=legend_elements,
+            loc="lower right",
+            fontsize=6,
+            frameon=True,
+            framealpha=0.9,
+            edgecolor="none",
+        )
 
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)

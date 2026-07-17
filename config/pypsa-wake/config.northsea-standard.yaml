@@ -1,0 +1,184 @@
+# ============================================================================
+# SI ROBUSTNESS VARIANT -- upstream-STANDARD offshore carrier selection.
+# Identical to config.northsea.yaml except spatial_mods.mode (standard vs
+# dominant), run prefix, and a separate wake_extra cache dir (the cache key
+# does not include the mode). Backs the Standard-vs-Dominant SI appendix.
+# ============================================================================
+# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
+# SPDX-License-Identifier: CC0-1.0
+#
+# ============================================================================
+# HARMONISED NORTH SEA CONFIG  --  Applied Energy wake paper
+# ============================================================================
+# Single configuration for ALL North Sea results in the manuscript:
+#   * Section "spatial resolution matters" (foundation)  -> base (NoWake) sweep
+#   * Wake-formulation comparison + resolution-invariance -> 4 wake models
+# Only fork-specific values are set here; everything else inherits
+# config.default.yaml. Scenarios (wake method x offshore resolution) live in
+# config/pypsa-wake/scenarios.yaml.
+#
+# Mirrors the thesis wake run (chapter 7, Fig. 7.9-7.14) so a rerun reproduces
+# the canonical figures, then extends it to a single consistent grid.
+#
+# >>> KEY DECISION -- CO2 cap: this matches the thesis wake run, which inherited
+#     config.default.yaml where co2limit_enable: false (NO CO2 cap). The thesis
+#     *spatial* chapter used a cap (7.75e7 t); the wake chapter (canonical here)
+#     did not. To impose a 2030 CO2 cap instead, set under `electricity:`
+#         co2limit_enable: true
+#         co2limit: 77500000.0      # tCO2 (example; ~ -95% vs co2base)
+#     NOTE: enabling a cap will change absolute build-out away from Fig. 7.9-7.14.
+# ============================================================================
+
+run:
+  prefix: "paper-northsea-2030-10-standard-6h"
+  name:
+    # SI robustness check: upstream-standard offshore carrier selection, no-wake
+    # baseline only, mirroring the fixed-fleet experiment's three resolutions.
+    - base-s100000-biasFalse
+    - base-s10000-biasFalse
+    - base-s1000-biasFalse
+  scenarios:
+    enable: true
+    file: config/pypsa-wake/scenarios.yaml
+  # `policy: base` would share the base-network resources across the runs, but
+  # it is broken on upstream master: `process_cost_data` writes
+  # costs_{planning_horizons}_processed.csv to a per-run path while
+  # `add_electricity` reads it from the shared path, so the DAG fails with a
+  # MissingInputException (reproducible on pristine upstream). Until that is
+  # fixed, each run rebuilds its own resources.
+  shared_resources:
+    policy: false
+
+scenario:
+  clusters:
+    - 10
+  planning_horizons:
+    - 2030
+
+countries: ['BE', 'DK', 'NL', 'GB', 'FR', 'DE', 'NO']
+
+snapshots:
+  start: "2023-01-01"
+  end: "2024-01-01"
+
+# Fork-specific: variable OFFSHORE spatial resolution, dominant offshore mode
+spatial_mods:
+  mode: standard
+  sea_shape: data/north_sea_shape_updated.geojson
+  shared_files: northsea-standard
+  offshore_threshold: 100000      # overridden per scenario
+  onshore_threshold: false        # onshore NOT split (offshore resolution only)
+
+electricity:
+  # The thesis wake run carried a binding CO2Limit of 77.5 Mt (shadow price
+  # ~86 EUR/t) and this is what its Fig. 7.9-7.14 rest on. Without it, unabated
+  # fossil is cheaper than offshore wind, nothing offshore is built, and every
+  # wake formulation returns the same objective: the study degenerates.
+  # Written out in full: YAML 1.1 reads `7.75e7` as a string, not a float.
+  co2limit_enable: true
+  co2limit: 77500000.0
+  wake_model:
+    method: base                  # overridden per scenario
+  extendable_carriers:
+    Generator: [offwind-ac, offwind-dc, offwind-float, onwind, solar]
+    StorageUnit: [battery]
+    Store: []
+    Link: []
+  powerplants_filter: (DateOut >= 2023 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  estimate_renewable_capacities:
+    enable: false
+  transmission_limit: vopt
+
+atlite:
+  default_cutout: europe-2023-sarah3-era5
+  nprocesses: 2
+  cutouts:
+    europe-2023-sarah3-era5:
+      module: [sarah, era5]
+      x: [-12., 42.]
+      y: [33., 72.]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+
+renewable:
+  onwind:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      add_cutout_windspeed: true
+  offwind-ac:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1          # wake handled by wake_model, not atlite derate
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    min_shore_distance: 1000
+    landfall_length: 10
+  offwind-dc:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    landfall_length: 10
+  offwind-float:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    min_shore_distance: 1000
+    landfall_length: 10
+
+costs:
+  year: 2030
+
+clustering:
+  temporal:
+    # These are electricity-only runs, so `prepare_network` reads
+    # `resolution_elec`. `resolution_sector` is only consumed by the sector
+    # workflow and is inert here: leaving it alone would solve all 8760
+    # hourly snapshots instead of the 1460 six-hourly ones the thesis used.
+    resolution_elec: 6h
+    resolution_sector: 6h
+
+solving:
+  # Offshore wind is not cost-competitive against onshore+solar on the current
+  # (2030) cost data, so it does not deploy endogenously and every wake model
+  # returns the same objective. Impose a per-country offshore capacity floor
+  # from the Esbjerg (2022) / Ostend (2023) North Sea declarations (112 GW
+  # total) via PyPSA-Eur's country-carrier-limit (CCL) constraint. The wake
+  # models then differ in how that committed capacity is derated and sited.
+  # Targets are in data/agg_p_nom_minmax_northsea.csv; adjust there.
+  constraints:
+    CCL: true
+  agg_p_nom_limits:
+    file: data/agg_p_nom_minmax_northsea.csv
+    agg_offwind: true
+    agg_solar: false
+    include_existing: false
+  options:
+    noisy_costs: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 0
+  # Neither config used to set `solver`, so both silently inherited gurobi from
+  # config.default.yaml while overriding only `solver_options`. Pin it here.
+  # `threads: 8` gives the whole machine to one solve at `--cores 8`; drop it to
+  # 2 to run four of the twelve concurrently. To run without a Gurobi licence,
+  # switch to `name: highs, options: highs-default` (highspy is a declared dep).
+  solver:
+    name: gurobi
+    options: gurobi-default
+  solver_options:
+    gurobi-default:
+      threads: 8
+      BarConvTol: 1.e-6
+  mem_mb: 100000
+  runtime: 6h

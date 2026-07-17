@@ -12,15 +12,18 @@ from __future__ import annotations
 # ---------- Canonical display names ----------
 THESIS_LABELS = {
     # global scenarios (Chapter 8 / high-level)
-    "base": "Baseline",
-    "standard": "Uniform",
+    # NB: aligned 2026-07-14 with the wake manuscript's terminology (which in
+    # turn matches the static Methods figure wake_models_density_comparison):
+    # No-wake / Uniform scaling / Tiered capacity / Tiered density.
+    "base": "No-wake",
+    "standard": "Uniform scaling",
     "bias": "PyVWF bias",
     "wake": "Tiered-density wake",
     "bias+wake": "Bias + wake",
 
     # wake model keys (Chapter 6)
-    "glaum": "Tiered-capacity",
-    "new_more": "Tiered-density",
+    "glaum": "Tiered capacity",
+    "new_more": "Tiered density",
 
     # bias flags (Chapter 7)
     "biasidw": "PyVWF (IDW)",
