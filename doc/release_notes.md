@@ -6,6 +6,8 @@
 <!-- Upcoming Release -->
 <!-- ================= -->
 
+* feat: Add an offshore wind wake-effect model via `electricity: wake_model: method: tiered_density`, which makes wake losses a function of capacity density ([loss-density relationship](https://doi.org/10.1016/j.weer.2026.100025)) and is therefore invariant to the offshore spatial resolution. Offshore generators are split into capacity bands so that losses respond endogenously to deployment. The default is `none`, which retains the existing flat `correction_factor` proxy, so results are unchanged unless the model is explicitly enabled ([#153](https://github.com/PyPSA/pypsa-eur/issues/153)).
+
 * feat: data version CSV / YAML file can be specified separately or extended by the user in the `data.version_files` config entry ([#2016](https://github.com/PyPSA/pypsa-eur/issues/2016)).
 * Fix: Resolve plotting crashes from missing `tech_colors` entries by adding `heat dsm` color and implementing upfront validation for missing keys in `plot_summary.py` ([#2108](https://github.com/PyPSA/pypsa-eur/issues/2108)).
 * feat: Make the default target rule configurable (defaults to "all" for backwards compatibility)

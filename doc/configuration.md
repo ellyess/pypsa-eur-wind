@@ -251,6 +251,24 @@ Configuration for `electricity` settings.
 
 {{ schema_table("electricity") }}
 
+!!! note
+    Notes on `wake_model`. By default (`method: none`) offshore wake losses are
+    represented by the flat `correction_factor` of 0.8855 applied to the
+    offshore capacity factors, which does not depend on how much capacity is
+    built. Setting `method: tiered_density` replaces that proxy with an
+    explicit model applied in `add_electricity`.
+
+    `tiered_density` makes the marginal wake losses a function of capacity
+    density (MW/km²), so the resulting wake loss does not depend on the
+    offshore spatial resolution. Each offshore generator is split into
+    capacity bands, so the losses respond endogenously to deployment. The
+    underlying loss-density relationship is taken from
+    [this study](https://doi.org/10.1016/j.weer.2026.100025).
+
+    Because the wake model supersedes the flat proxy, `correction_factor` must
+    be set to `1` for every `offwind-*` carrier when it is enabled; otherwise
+    the losses would be counted twice and `add_electricity` raises an error.
+
 **YAML Syntax**
 
 ```yaml

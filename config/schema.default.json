@@ -2143,6 +2143,52 @@
             }
           }
         },
+        "wake_model": {
+          "description": "Configuration for `electricity.wake_model` settings.",
+          "properties": {
+            "method": {
+              "default": "none",
+              "description": "Offshore wind wake model. `none` keeps the flat `renewable: <carrier>: correction_factor` proxy. `tiered_density` supersedes it and requires that factor to be set to 1.",
+              "enum": [
+                "none",
+                "tiered_density"
+              ],
+              "type": "string"
+            },
+            "tiered_density": {
+              "description": "Configuration for `electricity.wake_model.tiered_density` settings.",
+              "properties": {
+                "alpha": {
+                  "default": 7.3,
+                  "description": "Amplitude of the exponential term of the wake loss curve T(x) = alpha * exp(-x / beta) + gamma * x + delta.",
+                  "type": "number"
+                },
+                "beta": {
+                  "default": 0.05,
+                  "description": "Decay density (MW/km\u00b2) of the exponential term of the wake loss curve.",
+                  "type": "number"
+                },
+                "gamma": {
+                  "default": -0.7,
+                  "description": "Linear coefficient of the wake loss curve.",
+                  "type": "number"
+                },
+                "delta": {
+                  "default": -14.6,
+                  "description": "Constant offset of the wake loss curve.",
+                  "type": "number"
+                },
+                "breakpoints": {
+                  "description": "Capacity density tier edges (MW/km\u00b2). Each interval becomes one generator segment.",
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
         "max_hours": {
           "description": "Configuration for `electricity.max_hours` settings.",
           "properties": {
@@ -8108,6 +8154,38 @@
         }
       }
     },
+    "_TieredDensityWakeConfig": {
+      "description": "Configuration for `electricity.wake_model.tiered_density` settings.",
+      "properties": {
+        "alpha": {
+          "default": 7.3,
+          "description": "Amplitude of the exponential term of the wake loss curve T(x) = alpha * exp(-x / beta) + gamma * x + delta.",
+          "type": "number"
+        },
+        "beta": {
+          "default": 0.05,
+          "description": "Decay density (MW/km\u00b2) of the exponential term of the wake loss curve.",
+          "type": "number"
+        },
+        "gamma": {
+          "default": -0.7,
+          "description": "Linear coefficient of the wake loss curve.",
+          "type": "number"
+        },
+        "delta": {
+          "default": -14.6,
+          "description": "Constant offset of the wake loss curve.",
+          "type": "number"
+        },
+        "breakpoints": {
+          "description": "Capacity density tier edges (MW/km\u00b2). Each interval becomes one generator segment.",
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      }
+    },
     "_TransmissionEfficiencyConfig": {
       "description": "Configuration for `sector.transmission_efficiency` settings.",
       "properties": {
@@ -8172,6 +8250,52 @@
           "default": "https://github.com/PyPSA/pypsa-eur",
           "description": "Website URL for the project using the Overpass API.",
           "type": "string"
+        }
+      }
+    },
+    "_WakeModelConfig": {
+      "description": "Configuration for `electricity.wake_model` settings.",
+      "properties": {
+        "method": {
+          "default": "none",
+          "description": "Offshore wind wake model. `none` keeps the flat `renewable: <carrier>: correction_factor` proxy. `tiered_density` supersedes it and requires that factor to be set to 1.",
+          "enum": [
+            "none",
+            "tiered_density"
+          ],
+          "type": "string"
+        },
+        "tiered_density": {
+          "description": "Configuration for `electricity.wake_model.tiered_density` settings.",
+          "properties": {
+            "alpha": {
+              "default": 7.3,
+              "description": "Amplitude of the exponential term of the wake loss curve T(x) = alpha * exp(-x / beta) + gamma * x + delta.",
+              "type": "number"
+            },
+            "beta": {
+              "default": 0.05,
+              "description": "Decay density (MW/km\u00b2) of the exponential term of the wake loss curve.",
+              "type": "number"
+            },
+            "gamma": {
+              "default": -0.7,
+              "description": "Linear coefficient of the wake loss curve.",
+              "type": "number"
+            },
+            "delta": {
+              "default": -14.6,
+              "description": "Constant offset of the wake loss curve.",
+              "type": "number"
+            },
+            "breakpoints": {
+              "description": "Capacity density tier edges (MW/km\u00b2). Each interval becomes one generator segment.",
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            }
+          }
         }
       }
     },
@@ -8611,6 +8735,52 @@
               "default": 4000,
               "description": "Fixed reserve capacity (MW).",
               "type": "number"
+            }
+          }
+        },
+        "wake_model": {
+          "description": "Configuration for `electricity.wake_model` settings.",
+          "properties": {
+            "method": {
+              "default": "none",
+              "description": "Offshore wind wake model. `none` keeps the flat `renewable: <carrier>: correction_factor` proxy. `tiered_density` supersedes it and requires that factor to be set to 1.",
+              "enum": [
+                "none",
+                "tiered_density"
+              ],
+              "type": "string"
+            },
+            "tiered_density": {
+              "description": "Configuration for `electricity.wake_model.tiered_density` settings.",
+              "properties": {
+                "alpha": {
+                  "default": 7.3,
+                  "description": "Amplitude of the exponential term of the wake loss curve T(x) = alpha * exp(-x / beta) + gamma * x + delta.",
+                  "type": "number"
+                },
+                "beta": {
+                  "default": 0.05,
+                  "description": "Decay density (MW/km\u00b2) of the exponential term of the wake loss curve.",
+                  "type": "number"
+                },
+                "gamma": {
+                  "default": -0.7,
+                  "description": "Linear coefficient of the wake loss curve.",
+                  "type": "number"
+                },
+                "delta": {
+                  "default": -14.6,
+                  "description": "Constant offset of the wake loss curve.",
+                  "type": "number"
+                },
+                "breakpoints": {
+                  "description": "Capacity density tier edges (MW/km\u00b2). Each interval becomes one generator segment.",
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                }
+              }
             }
           }
         },
