@@ -32,6 +32,13 @@ from sklearn.cluster import KMeans
 
 logger = logging.getLogger(__name__)
 
+#: Ceiling on how far mesh_region may raise the part count above
+#: ceil(area / threshold) while trying to bring every part under the cap.
+#: Only a backstop. Measured need on test geometry: 1.2x for a plain rectangle,
+#: 1.25x for a notched multipolygon with a detached island, 1.4x for three
+#: separate islands, where each component needs its own parts.
+_MAX_PARTS_FACTOR = 4
+
 # Type aliases
 Geometry = Union[Polygon, MultiPolygon]
 ArrayLike2D = Union[np.ndarray, Sequence[Sequence[float]]]
@@ -247,12 +254,44 @@ def mesh_region(
             return [geometry]
         return list(geometry.geoms)
 
+    # ceil(area / threshold) is the count you would need if every part came out
+    # at exactly the cap. Voronoi cells from K-means centres are unequal in area,
+    # so at that count some parts overflow and the threshold this function
+    # documents as a maximum is not honoured. It also understates the
+    # requirement whenever the region has disconnected components, since a part
+    # cannot span a gap. Raise the count until no part exceeds the cap.
     n_parts = int(np.ceil(area_km2 / threshold_km2))
-    inner_pts = fill_shape_with_points(
-        geometry, min_points=max(n_parts * min_points_factor, n_parts)
-    )
-    centers = cluster_points(inner_pts, n_clusters=n_parts, random_state=random_state)
-    return voronoi_partition(centers, geometry)
+    max_parts = max(n_parts * _MAX_PARTS_FACTOR, n_parts + 1)
+
+    # Convert part areas to km2 using the caller's own area_km2 rather than
+    # assuming the CRS is in metres, so the check engages whatever the units.
+    to_km2 = area_km2 / geometry.area if geometry.area > 0 else 0.0
+
+    while True:
+        inner_pts = fill_shape_with_points(
+            geometry, min_points=max(n_parts * min_points_factor, n_parts)
+        )
+        centers = cluster_points(
+            inner_pts, n_clusters=n_parts, random_state=random_state
+        )
+        parts = voronoi_partition(centers, geometry)
+
+        largest_km2 = max((p.area for p in parts), default=0.0) * to_km2
+        if largest_km2 <= threshold_km2:
+            return parts
+
+        if n_parts >= max_parts:
+            logger.warning(
+                "mesh_region: could not bring every part under %.1f km2 within "
+                "%d parts; largest is %.1f km2 (%.1f%% over). Returning anyway.",
+                threshold_km2,
+                max_parts,
+                largest_km2,
+                100.0 * (largest_km2 / threshold_km2 - 1.0),
+            )
+            return parts
+
+        n_parts += 1
 
 
 def split_regions(
