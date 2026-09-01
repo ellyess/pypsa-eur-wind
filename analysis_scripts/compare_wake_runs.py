@@ -1734,10 +1734,19 @@ def _extend_density_total_loss_to_capacity_axis(
 def _capacity_tier_total_loss_on_capacity_axis(
     P_GW: np.ndarray,
     spec: WakeSplitSpec,
+    *,
+    global_derate: Optional[float] = None,
 ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Compute capacity-tier model total loss T(P) for P-axis (GW),
     with constant extension beyond last finite breakpoint by holding last marginal constant.
+
+    ``spec.factors`` holds only the *additional* tier losses; the formulation
+    also applies a uniform base correction to every offshore generator (see
+    ``wake_effects.add_wake_generators``). The two are composed here so the
+    returned losses are the totals the model actually applies, i.e. 9.4%,
+    21.0% and 32.0% rather than 0%, 12.8% and 24.9%. Pass
+    ``global_derate=1.0`` for the tier component alone.
     """
     P_GW = np.asarray(P_GW, dtype=float)
 
@@ -1748,7 +1757,18 @@ def _capacity_tier_total_loss_on_capacity_axis(
     seg_caps_MW_finite = seg_caps_MW[np.isfinite(seg_caps_MW)]
     breaks_GW = np.r_[0.0, np.cumsum(seg_caps_MW_finite) / 1000.0]  # GW
 
+    if global_derate is None:
+        try:
+            from wake_effects import (  # noqa: PLC0415
+                DEFAULT_CAPACITY_TIERED_COEFFICIENTS as _CAP_COEFFS,
+            )
+            global_derate = float(_CAP_COEFFS.get("global_derate", 0.906))
+        except Exception:
+            global_derate = 0.906
+
+    # Compose the uniform base correction with each tier's additional loss.
     M_cap = np.asarray(spec.factors, dtype=float)
+    M_cap = 1.0 - float(global_derate) * (1.0 - M_cap)
 
     breaks2 = np.array([0.0, breaks_GW[1], breaks_GW[2]])  # [0,2,12]
     M1, M2, M3 = M_cap
@@ -1780,13 +1800,16 @@ def _capacity_tier_total_loss_on_density_axis(
     spec: WakeSplitSpec,
     *,
     A_ref_km2: float,
+    global_derate: Optional[float] = None,
 ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Show capacity-tier model as a function of density x by mapping x -> P (for a reference area).
     """
     x_grid = np.asarray(x_grid, dtype=float)
     P_GW = (x_grid * float(A_ref_km2)) / 1000.0
-    T_P, (P_breaks, M) = _capacity_tier_total_loss_on_capacity_axis(P_GW, spec)
+    T_P, (P_breaks, M) = _capacity_tier_total_loss_on_capacity_axis(
+        P_GW, spec, global_derate=global_derate
+    )
     # Map P breaks to x breaks:
     x_breaks = (P_breaks * 1000.0) / float(A_ref_km2)
     return T_P, (x_breaks, M)
