@@ -117,39 +117,27 @@ def wake_loss_vs_density(data, summary):
 
 
 def wake_models_density_comparison(data, summary):
-    """The three loss curves as a function of density, evaluated analytically.
+    """The wake-loss formulations as functions of capacity density, for two
+    reference region areas.
 
     This is a property of the formulations, not of a model run, so it is
-    computed from the wake coefficients rather than the results.
+    computed analytically from the wake coefficients rather than the results.
+    Delegates to :func:`compare_wake_runs.plot_wake_models_density_two_areas`,
+    which is the single source of truth for this figure.
     """
     import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-    from wake_effects import (  # noqa: PLC0415
-        DEFAULT_FLAT_COEFFICIENTS,
-        DEFAULT_TIERED_DENSITY_COEFFICIENTS as TD,
+    root = Path(__file__).resolve().parents[2]
+    for sub in ("scripts", "analysis_scripts"):
+        path = str(root / sub)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+    from compare_wake_runs import (  # noqa: PLC0415
+        plot_wake_models_density_two_areas,
     )
 
-    density = np.linspace(0.01, 4.0, 400)
-    total_loss = TD["alpha"] * np.exp(-density / TD["beta"]) + TD["gamma"] * density + TD["delta"]
-
-    uniform = (1.0 - DEFAULT_FLAT_COEFFICIENTS["derate_factor"]) * 100.0
-
-    curves = pd.DataFrame(
-        {
-            "density": np.concatenate([density, density]),
-            "wake_loss_pct": np.concatenate([np.full_like(density, uniform), -total_loss]),
-            "scenario": ["standard"] * len(density) + ["new_more"] * len(density),
-        }
-    )
-    return plot_vs_density(
-        curves,
-        y="wake_loss_pct",
-        ylabel="Total wake loss [%]",
-        marker=None,
-        height_cm=6.0,
-    )
+    return plot_wake_models_density_two_areas()
 
 
 # ---------------------------------------------------------------------------
