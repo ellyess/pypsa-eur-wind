@@ -111,9 +111,18 @@ class TestFigures:
             builder(stripped, summary)
 
     def test_wake_manuscript_reuses_the_cross_domain_panel(self):
-        """The wake paper's EXTERNAL registry points here for this figure."""
+        """The wake paper's EXTERNAL registry points here for this figure.
+
+        tier-2 writes the panel as .png, while the wake manuscript embeds a PDF
+        of it. paper_wake.EXTERNAL is keyed by the filenames the manuscript
+        cites, so the two registries agree on the stem, not the extension.
+        """
         from paper_wake.figures import EXTERNAL
 
-        name = "fig_europe_vs_northsea_offwind_cap.png"
-        assert name in figures_tier2.FIGURES
-        assert "tier2" in EXTERNAL[name]
+        stem = "fig_europe_vs_northsea_offwind_cap"
+        assert f"{stem}.png" in figures_tier2.FIGURES
+        wake_entries = [
+            value for name, value in EXTERNAL.items() if name.rsplit(".", 1)[0] == stem
+        ]
+        assert len(wake_entries) == 1, f"expected one wake entry for {stem}"
+        assert "tier2" in wake_entries[0]

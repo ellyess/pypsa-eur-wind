@@ -205,15 +205,25 @@ FIGURES = {
     "system_cost_delta_pct.pdf": system_cost_delta_pct,
 }
 
-#: Figures that need the solved networks or the region geometries, and the
-#: script that builds them. `make_paper.py` reports these rather than
-#: pretending the manuscript is complete without them.
+#: Figures that need the solved networks, the region geometries, or a separate
+#: extraction, and the command that builds them. `make_paper.py` reports these
+#: rather than pretending the manuscript is complete without them.
+#:
+#: The keys are the filenames as the manuscript cites them, so a figure that is
+#: embedded in a different format than the producing script writes, or under a
+#: different name, records that extra step here rather than leaving the gap
+#: silent.
 EXTERNAL = {
     "capacity_mix.pdf": "wake_extra_plots.py",
     "energy_mix.pdf": "wake_extra_plots.py",
     "capacity_density_delta_maps.pdf": "compare_wake_runs.py cap-delta-map",
-    "region_splits.png": "compare_spatial_runs.py",
-    "fig_europe_vs_northsea_offwind_cap.png": "compare_sensitivity_runs_tier2.py",
+    "region_splits_offshore.png": "compare_spatial_runs.py --plot-region-splits --offshore-only",
+    "new_more_breakpoints_fit.png": "fit_new_more_breakpoints.py",
+    # tier-2 writes this panel as .png; the manuscript embeds a PDF of it.
+    "fig_europe_vs_northsea_offwind_cap.pdf": "compare_sensitivity_runs_tier2.py (writes .png; converted to PDF)",
+    # same builder as wake_loss_vs_resolution.pdf, run against the floored
+    # extraction (the offshore-floor runs) and kept under a distinct name.
+    "wake_loss_vs_resolution_floored.pdf": "make_paper.py --data-dir <floored extraction>, renamed *_floored.pdf",
 }
 
 

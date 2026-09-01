@@ -697,12 +697,14 @@ def _run_spatial_diagnostics(
         plt.close(fig)
 
     if args.plot_region_splits:
+        name = "region_splits_offshore.png" if args.offshore_only else "region_splits.png"
         plot_region_splits(
             args.regions_prefix,
             args.splits,
             regions_dir=args.regions_dir,
             filename_template=args.regions_template,
-            out=str(out_dir / "region_splits.png"),
+            out=str(out_dir / name),
+            include_onshore=not args.offshore_only,
         )
 
     # --- Optional: per-run histograms
@@ -795,6 +797,13 @@ def main():
         "--plot-region-splits",
         action="store_true",
         help="Also plot region split maps for selected Amax values.",
+    )
+    ap.add_argument(
+        "--offshore-only",
+        action="store_true",
+        help="Draw only the offshore regions in the split maps, and write "
+        "region_splits_offshore.png instead of region_splits.png. This is the "
+        "variant the wake manuscript embeds.",
     )
 
     ap.add_argument(
