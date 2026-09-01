@@ -125,7 +125,7 @@ class TestPlotDistribution:
     def test_legend_uses_display_labels(self, styled, wake_df):
         fig = plot_distribution(wake_df, value="wake_loss", kind="cdf")
         texts = [t.get_text() for t in fig.get_axes()[0].get_legend().get_texts()]
-        assert "Tiered-density" in texts
+        assert "Tiered density" in texts
         assert "new_more" not in texts
 
     def test_bad_kind_raises(self, styled, wake_df):
