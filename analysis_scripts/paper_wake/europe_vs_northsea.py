@@ -9,8 +9,8 @@ extracted metric sets, so the figure is reproducible from the pipeline.
 
 Usage:
     python analysis_scripts/paper_wake/europe_vs_northsea.py \
-        --northsea analysis_scripts/data/wake_extracted_sector_splitfix \
-        --europe   analysis_scripts/data/wake_extracted_europe_splitfix \
+        --northsea analysis_scripts/data/wake_extracted_sector \
+        --europe   analysis_scripts/data/wake_extracted_europe_sector \
         --out      images/fig_europe_vs_northsea_offwind_cap.pdf
 """
 

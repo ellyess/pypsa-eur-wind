@@ -16,8 +16,8 @@ and the few that do are small at fine resolution:
 
 Usage:
     python analysis_scripts/paper_wake/capacity_density_delta.py \
-        --results-dir results/paper-northsea-sector-2030-10-dominant-6h-splitfix \
-        --regions-area northsea-splitfix \
+        --results-dir results/paper-northsea-sector-2030-10-dominant-6h \
+        --regions-area northsea \
         --out images/capacity_density_delta_maps.pdf
 """
 
