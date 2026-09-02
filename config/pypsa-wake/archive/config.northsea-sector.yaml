@@ -1,0 +1,181 @@
+# SPDX-FileCopyrightText: : 2017-2024 The PyPSA-Eur Authors
+# SPDX-License-Identifier: CC0-1.0
+#
+# ============================================================================
+# HARMONISED NORTH SEA CONFIG (SECTOR-COUPLED) -- Applied Energy wake paper
+# ============================================================================
+# Sector-coupled counterpart of config.northsea.yaml. Same fork-specific wake +
+# offshore-resolution settings, but the system is sector-coupled (heat, H2,
+# transport, industry) with an overnight 2030 CO2 budget instead of an
+# electricity-only CO2 cap.
+#
+# WHY SECTOR COUPLING: on 2030 electricity-only costs offshore wind is not
+# cost-competitive, so it does not deploy endogenously and every wake model
+# coincides -- the elec-only config.northsea.yaml has to FORCE offshore with a
+# capacity floor (CCL). Sector coupling raises and diversifies electricity
+# demand (electrified heat/transport, flexible electrolysis) so offshore
+# deploys on its own economics, and the wake derating then reduces deployment
+# (the right sign) via genuine cost competition -- reproducing the endogenous
+# deployment story of the original manuscript draft. Verified on the thesis
+# sector runs: TierDensity builds 36-48% less offshore than the no-wake
+# baseline, with the system substituting onshore wind + solar.
+#
+# Everything not set here inherits config.default.yaml (incl. the full `sector:`
+# block: transport/heating/H2/industry/biomass on). Scenarios (wake method x
+# offshore resolution) live in config/pypsa-wake/scenarios.yaml -- the SAME file
+# as the elec-only run, since it only sets electricity.wake_model.method and
+# spatial_mods.offshore_threshold.
+# ============================================================================
+
+foresight: overnight
+
+run:
+  prefix: "paper-northsea-sector-2030-10-dominant-6h"
+  name:
+    # --- No-wake baseline (NoWake)
+    - base-s100000-biasFalse
+    - base-s10000-biasFalse
+    - base-s1000-biasFalse
+    # --- Uniform scaling
+    - standard-s100000-biasFalse
+    - standard-s10000-biasFalse
+    - standard-s1000-biasFalse
+    # --- Capacity tiers (TierCap)
+    - glaum-s100000-biasFalse
+    - glaum-s10000-biasFalse
+    - glaum-s1000-biasFalse
+    # --- Density tiers (TierDensity, this work)
+    - new_more-s100000-biasFalse
+    - new_more-s10000-biasFalse
+    - new_more-s1000-biasFalse
+  scenarios:
+    enable: true
+    file: config/pypsa-wake/scenarios.yaml
+  # See config.northsea.yaml: `policy: base` is broken on upstream master.
+  shared_resources:
+    policy: false
+
+scenario:
+  clusters:
+    - 10
+  opts:
+    - ''
+  sector_opts:
+    - ''
+  planning_horizons:
+    - 2030
+
+countries: ['BE', 'DK', 'NL', 'GB', 'FR', 'DE', 'NO']
+
+snapshots:
+  start: "2023-01-01"
+  end: "2024-01-01"
+
+# Sector-wide CO2 budget as a fraction of 1990 emissions of the modelled
+# countries. 2030 = 0.297 (~ -70%) matches the thesis sector run; overnight
+# foresight uses only the single planning-horizon value. The stricter budget is
+# what makes deep decarbonisation (and hence offshore wind) attractive.
+co2_budget:
+  2030: 0.297
+
+# Fork-specific: variable OFFSHORE spatial resolution, dominant offshore mode.
+spatial_mods:
+  mode: dominant
+  sea_shape: data/north_sea_shape_updated.geojson
+  shared_files: northsea
+  offshore_threshold: 100000      # overridden per scenario
+  onshore_threshold: false        # onshore NOT split (offshore resolution only)
+
+electricity:
+  # Sector coupling constrains CO2 via `co2_budget` (a global co2_atmosphere
+  # limit added in prepare_sector_network), NOT via the electricity-only cap.
+  co2limit_enable: false
+  wake_model:
+    method: base                  # overridden per scenario
+  extendable_carriers:
+    Generator: [offwind-ac, offwind-dc, offwind-float, onwind, solar]
+    StorageUnit: [battery]
+    Store: []
+    Link: []
+  powerplants_filter: (DateOut >= 2023 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  estimate_renewable_capacities:
+    enable: false
+  transmission_limit: vopt
+
+atlite:
+  default_cutout: europe-2023-sarah3-era5
+  nprocesses: 2
+  cutouts:
+    europe-2023-sarah3-era5:
+      module: [sarah, era5]
+      x: [-12., 42.]
+      y: [33., 72.]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+
+renewable:
+  onwind:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      add_cutout_windspeed: true
+  offwind-ac:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1          # wake handled by wake_model, not atlite derate
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    min_shore_distance: 1000
+    landfall_length: 10
+  offwind-dc:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    landfall_length: 10
+  offwind-float:
+    cutout: europe-2023-sarah3-era5
+    resource:
+      turbine: NREL_ReferenceTurbine_2020ATB_12MW_offshore
+      add_cutout_windspeed: true
+    capacity_per_sqkm: 4
+    correction_factor: 1
+    corine: false                # offshore: no land-cover CORINE (open sea is outside its coverage)
+    min_shore_distance: 1000
+    landfall_length: 10
+
+costs:
+  year: 2030
+
+clustering:
+  temporal:
+    # Sector-coupled solves take their temporal resolution from
+    # `resolution_sector`; `resolution_elec` MUST be false here (time_aggregation
+    # rejects a sector model that also sets resolution_elec). 6h -> 1460 snapshots.
+    resolution_elec: false
+    resolution_sector: 6h
+
+solving:
+  # NO capacity floor here (contrast config.northsea.yaml): under sector coupling
+  # offshore wind deploys endogenously, so the CCL/agg_p_nom_limits constraint is
+  # deliberately omitted. The wake models differ in how much offshore is built.
+  options:
+    noisy_costs: false
+    min_iterations: 4
+    max_iterations: 6
+    transmission_losses: 0
+  solver:
+    name: gurobi
+    options: gurobi-default
+  solver_options:
+    gurobi-default:
+      threads: 8
+      BarConvTol: 1.e-6
+      crossover: 0
+  mem_mb: 120000
+  runtime: 12h
