@@ -77,6 +77,8 @@ TECH_LABELS = {
     "offwind-dc": "Offshore Wind (DC)",
     "offwind-float": "Offshore Wind (Floating)",
     "solar": "Solar",
+    "solar rooftop": "Rooftop Solar",
+    "solar-hsat": "Solar (Tracking)",
     "OCGT": "Open-Cycle Gas",
     "CCGT": "Combined-Cycle Gas",
     "nuclear": "Nuclear",
@@ -212,7 +214,7 @@ def plot_capacity_mix(
     # Collect capacity data
     all_cap = {}
     for scen, n in networks.items():
-        cap = capacity_by_carrier(n) / 1e3  # MW -> GW
+        cap = capacity_by_carrier(n, electricity_only=True) / 1e3  # MW -> GW
         all_cap[scen] = cap
 
     df = pd.DataFrame(all_cap).fillna(0.0)
@@ -284,7 +286,7 @@ def plot_energy_mix(
 
     all_en = {}
     for scen, n in networks.items():
-        en = energy_by_carrier_twh(n)
+        en = energy_by_carrier_twh(n, electricity_only=True)
         all_en[scen] = en
 
     df = pd.DataFrame(all_en).fillna(0.0)

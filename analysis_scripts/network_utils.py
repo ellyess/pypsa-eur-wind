@@ -294,9 +294,35 @@ def bus_country(bus_name: str) -> str:
     return s[:2] if len(s) >= 2 else "??"
 
 
-def capacity_by_carrier(n: pypsa.Network) -> pd.Series:
-    """Total optimised capacity (MW) grouped by carrier."""
+#: Bus carriers that represent electrical energy. Generators attached to any
+#: other bus carrier are primary-energy or slack supply (solid biomass, biogas,
+#: the "unsustainable" carriers of the sector build) and are not electricity
+#: generation, so summing them with wind and solar is not meaningful.
+ELECTRICITY_BUS_CARRIERS = ("AC", "low voltage")
+
+
+def electricity_generators(n: pypsa.Network) -> pd.Index:
+    """Return the generators attached to an electrical bus."""
+    bus_carrier = n.generators.bus.map(n.buses.carrier)
+    return n.generators.index[bus_carrier.isin(ELECTRICITY_BUS_CARRIERS)]
+
+
+def capacity_by_carrier(n: pypsa.Network, *, electricity_only: bool = False) -> pd.Series:
+    """Total optimised capacity (MW) grouped by carrier.
+
+    With ``electricity_only`` the sum is restricted to generators on electrical
+    buses, excluding storage and links. Without it the total is dominated by the
+    sector build's primary-energy and slack carriers.
+    """
     parts = []
+
+    if electricity_only:
+        idx = electricity_generators(n)
+        gens = n.generators.loc[idx]
+        p_nom = gens.p_nom_opt if "p_nom_opt" in gens else gens.p_nom
+        s = p_nom.groupby(gens.carrier).sum()
+        s.name = "capacity_MW"
+        return s.sort_values(ascending=False)
 
     if len(n.generators):
         p_nom = (
@@ -330,7 +356,7 @@ def capacity_by_carrier(n: pypsa.Network) -> pd.Series:
     return s.sort_values(ascending=False)
 
 
-def energy_by_carrier_twh(n: pypsa.Network) -> pd.Series:
+def energy_by_carrier_twh(n: pypsa.Network, *, electricity_only: bool = False) -> pd.Series:
     """Total generation (TWh) grouped by carrier."""
     if (
         not hasattr(n, "generators_t")
@@ -341,7 +367,11 @@ def energy_by_carrier_twh(n: pypsa.Network) -> pd.Series:
 
     w = snapshot_weights(n)
     mwh = (n.generators_t.p.mul(w, axis=0)).sum(axis=0)
-    twh = mwh.groupby(n.generators.carrier).sum() / 1e6
+    gens = n.generators
+    if electricity_only:
+        idx = electricity_generators(n).intersection(mwh.index)
+        mwh, gens = mwh.loc[idx], gens.loc[idx]
+    twh = mwh.groupby(gens.carrier).sum() / 1e6
     twh.name = "energy_TWh"
     return twh.sort_values(ascending=False)
 
