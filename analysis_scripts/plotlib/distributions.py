@@ -161,6 +161,16 @@ def plot_distribution(
             ax.set_xlabel("")
         else:
             ax.set_xlabel(split_label or split.replace("_", " ").capitalize())
+            # Match the thousands separators used on the line plots' axes.
+            labels = []
+            for tick in ax.get_xticklabels():
+                text = tick.get_text()
+                try:
+                    labels.append(f"{int(float(text)):,}")
+                except ValueError:
+                    labels.append(text)
+            ax.set_xticks(ax.get_xticks())
+            ax.set_xticklabels(labels)
 
     legend_above(ax, hue_opts["hue_order"])
     if split_styles:
