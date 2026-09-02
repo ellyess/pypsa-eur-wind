@@ -149,7 +149,7 @@ def savefig_thesis(
 def apply_spatial_resolution_axis(
     ax: plt.Axes,
     *,
-    xlabel: str = r"Spatial Resolution ($A_{region}^{max}$) [km$^{2}$]",
+    xlabel: str = r"Spatial resolution ($A_{region}^{max}$) [km$^{2}$]",
     annotate: bool = True,
 ) -> None:
     """

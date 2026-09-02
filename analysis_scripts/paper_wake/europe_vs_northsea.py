@@ -56,7 +56,7 @@ def _panel(ax, df: pd.DataFrame, title: str) -> None:
     for edge in (splits[0], splits[-1]):
         ax.axvline(edge, color="grey", linestyle="--", linewidth=0.9, alpha=0.7)
     ax.set_title(title, fontsize=10)
-    ax.set_xlabel(r"Spatial Resolution ($A^{max}_{region}$) [km$^2$]", fontsize=9)
+    ax.set_xlabel(r"Spatial resolution ($A_{region}^{max}$) [km$^{2}$]", fontsize=9)
     ax.tick_params(labelsize=8)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
