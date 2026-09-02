@@ -216,14 +216,15 @@ def _plot_fit(outdir: Path, result: FitResult, xmax: float) -> None:
     yx_hat = np.interp(xs, bp, yx_bp)
     y_hat = np.where(xs > 0, yx_hat / xs, y_loss_percent(xs))
 
-    fig, axes = plt.subplots(2, 1, figsize=(0.75 * FULL_WIDTH, 5.5), dpi=dpi, sharex=True)
+    # Side by side, with a single shared legend above both panels.
+    fig, axes = plt.subplots(1, 2, figsize=(FULL_WIDTH, 3.0), dpi=dpi)
 
     axes[0].plot(xs, y, label="Analytic curve", color="#4D4D4D")
     axes[0].plot(xs, y_hat, label="Piecewise fit", color="#009E73")
     axes[0].scatter(bp, y_bp, s=14, zorder=3, color="#009E73", label="Breakpoints")
+    axes[0].set_xlabel(r"Density (MW/km$^2$)")
     axes[0].set_ylabel("Loss (percent)")
     axes[0].grid(True, alpha=0.3)
-    axes[0].legend(frameon=False)
 
     axes[1].plot(xs, yx, label="Analytic curve", color="#4D4D4D")
     axes[1].plot(xs, yx_hat, label="Piecewise fit", color="#009E73")
@@ -231,8 +232,16 @@ def _plot_fit(outdir: Path, result: FitResult, xmax: float) -> None:
     axes[1].set_xlabel(r"Density (MW/km$^2$)")
     axes[1].set_ylabel("Loss * density")
     axes[1].grid(True, alpha=0.3)
-    axes[1].legend(frameon=False)
 
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.08),
+    )
     fig.tight_layout()
     format_axes_standard(fig)
     fig.savefig(outdir / "new_more_breakpoints_fit.png", bbox_inches="tight")
