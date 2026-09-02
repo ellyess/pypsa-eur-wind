@@ -393,7 +393,14 @@ def plot_region_splits(
     filename_template: str = "regions_offshore_s{split}.geojson",
     out: str = "plots/spatial/region_splits.png",
     include_onshore: bool = True,
+    plot_crs: int = 3035,
 ):
+    """Plot the offshore region meshes at each threshold.
+
+    Geometry is reprojected to *plot_crs* (ETRS89-LAEA Europe by default) before
+    plotting. Drawing the raw EPSG:4326 degrees distorts shape and area and does
+    not match the projected maps used elsewhere in the paper.
+    """
     regions_dir = Path(regions_dir)
 
     # Derive onshore template from offshore template
@@ -424,7 +431,7 @@ def plot_region_splits(
 
         # Plot onshore first (background layer)
         if include_onshore and fp_on.exists():
-            gpd.read_file(fp_on).plot(
+            gpd.read_file(fp_on).to_crs(plot_crs).plot(
                 ax=ax[i],
                 linewidth=LW,
                 color=FACE_ONSHORE,
@@ -434,7 +441,7 @@ def plot_region_splits(
 
         # Plot offshore on top
         if fp_off.exists():
-            gpd.read_file(fp_off).plot(
+            gpd.read_file(fp_off).to_crs(plot_crs).plot(
                 ax=ax[i],
                 linewidth=LW,
                 color=FACE_OFFSHORE,
@@ -443,6 +450,7 @@ def plot_region_splits(
             has_data = True
 
         if has_data:
+            ax[i].set_aspect("equal")
             ax[i].set_title(
                 rf"$A_{{region}}^{{max}}$: {split:,} km$^2$",
                 fontsize=7,
